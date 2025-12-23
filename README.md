@@ -18,6 +18,9 @@ cd claude-harness
 
 # Install dependencies (Claude SDK is optional for help/list/clean)
 pip install -r requirements.txt
+
+# For full agent functionality (requires access to private SDK):
+pip install -r requirements-sdk.txt
 ```
 
 ## Usage
