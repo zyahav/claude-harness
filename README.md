@@ -62,5 +62,20 @@ python3 harness.py clean my-feature-run --delete-branch
 - **`agent.py`**: Orchestrates the interaction between Claude and the SDK.
 - **`prompts/`**: Contains the system prompts for different agent roles.
 
+## Testing
+
+The project includes a comprehensive test suite using Python's `unittest` framework.
+
+```bash
+# Run all tests
+python3 -m unittest discover tests
+```
+
+Tests cover:
+- Schema validation
+- CLI argument parsing
+- Git lifecycle operations (in isolated temp environments)
+- Agent logic (mocked)
+
 ## License
 MIT

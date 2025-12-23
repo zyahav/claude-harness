@@ -2,7 +2,7 @@
 
 **Date:** 2025-12-22
 **Status:** Proposed
-**Author:** Gemini Agent
+**Author:** Development Team
 
 ## Context
 The `harness-lab` project is a CLI tool designed to orchestrate autonomous coding agents. Currently, the project has a hard, top-level dependency on the `claude_code_sdk` library in its core modules (`agent.py` and `client.py`).
