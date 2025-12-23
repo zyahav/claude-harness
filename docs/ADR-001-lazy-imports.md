@@ -1,7 +1,7 @@
 # Architecture Decision Record 001: Lazy Loading of Claude SDK
 
 **Date:** 2025-12-22
-**Status:** Proposed
+**Status:** Accepted
 **Author:** Development Team
 
 ## Context
