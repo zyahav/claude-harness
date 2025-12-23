@@ -18,7 +18,7 @@ from security import (
 )
 
 
-def test_hook(command: str, should_block: bool) -> bool:
+def check_hook(command: str, should_block: bool) -> bool:
     """Test a single command against the security hook."""
     input_data = {"tool_name": "Bash", "tool_input": {"command": command}}
     result = asyncio.run(bash_security_hook(input_data))
@@ -41,7 +41,7 @@ def test_hook(command: str, should_block: bool) -> bool:
     return True
 
 
-def test_extract_commands():
+def check_extract_commands():
     """Test the command extraction logic."""
     print("\nTesting command extraction:\n")
     passed = 0
@@ -69,7 +69,7 @@ def test_extract_commands():
     return passed, failed
 
 
-def test_validate_chmod():
+def check_validate_chmod():
     """Test chmod command validation."""
     print("\nTesting chmod validation:\n")
     passed = 0
@@ -112,7 +112,7 @@ def test_validate_chmod():
     return passed, failed
 
 
-def test_validate_init_script():
+def check_validate_init_script():
     """Test init.sh script execution validation."""
     print("\nTesting init.sh validation:\n")
     passed = 0
@@ -160,17 +160,17 @@ def main():
     failed = 0
 
     # Test command extraction
-    ext_passed, ext_failed = test_extract_commands()
+    ext_passed, ext_failed = check_extract_commands()
     passed += ext_passed
     failed += ext_failed
 
     # Test chmod validation
-    chmod_passed, chmod_failed = test_validate_chmod()
+    chmod_passed, chmod_failed = check_validate_chmod()
     passed += chmod_passed
     failed += chmod_failed
 
     # Test init.sh validation
-    init_passed, init_failed = test_validate_init_script()
+    init_passed, init_failed = check_validate_init_script()
     passed += init_passed
     failed += init_failed
 
@@ -210,7 +210,7 @@ def main():
     ]
 
     for cmd in dangerous:
-        if test_hook(cmd, should_block=True):
+        if check_hook(cmd, should_block=True):
             passed += 1
         else:
             failed += 1
@@ -268,7 +268,7 @@ def main():
     ]
 
     for cmd in safe:
-        if test_hook(cmd, should_block=False):
+        if check_hook(cmd, should_block=False):
             passed += 1
         else:
             failed += 1

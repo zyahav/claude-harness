@@ -13,8 +13,8 @@ A robust CLI harness for running long-running autonomous coding agents using Cla
 
 ```bash
 # Clone the repository
-git clone https://github.com/zyahav/harness-lab.git
-cd harness-lab
+git clone https://github.com/<ORG_OR_USER>/claude-harness.git
+cd claude-harness
 
 # Install dependencies (Claude SDK is optional for help/list/clean)
 pip install -r requirements.txt
