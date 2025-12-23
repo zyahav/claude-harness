@@ -1,0 +1,122 @@
+# OIDC Identity & Authority System
+
+## Overview
+
+This specification defines the identity, authority, and execution rules for the OIDC-based system.
+It replaces any generic application specification used by the autonomous coding harness.
+
+This document is authoritative. All agents must comply with it.
+
+---
+
+## Core Principle
+
+Identity and authority are determined centrally by the Hub.
+All other services are executors only.
+
+---
+
+## Identity Model
+
+* **Profile = Actor**
+
+  * The Profile represents the acting identity.
+  * The `sub` claim in all tokens MUST be the Profile ID.
+
+* **Account = Context Owner (Non-Authoritative)**
+
+  * Accounts provide billing, grouping, and context only.
+  * Accounts MUST NOT be used for authorization decisions.
+
+* **Session = Temporary Execution Context**
+
+  * Sessions bind a Profile to a request.
+  * Sessions do not grant authority.
+
+---
+
+## Authority Model
+
+* **Hub = Control Plane (Single Source of Truth)**
+
+  * All permission logic exists ONLY in the Hub.
+  * The Hub translates Profiles → Roles → Permissions.
+
+* **Subdomains = Dumb Executors**
+
+  * Subdomains execute instructions blindly.
+  * Subdomains MUST NOT:
+
+    * infer permissions
+    * resolve roles
+    * make authorization decisions
+    * call back to the Hub during normal execution
+
+---
+
+## Token Rules
+
+* Tokens MUST contain:
+
+  * `sub` = Profile ID
+  * optional metadata (e.g. account_id, session_id)
+
+* Tokens MUST NOT be interpreted outside the Hub.
+
+* Subdomains MUST trust tokens as-is.
+
+---
+
+## Execution Rules
+
+* Agents operate within a declared identity frame.
+* Identity frame is established BEFORE execution.
+* Agents MUST NOT:
+
+  * invent identities
+  * elevate permissions
+  * bypass Hub decisions
+
+---
+
+## Harness Responsibilities
+
+The execution harness MUST:
+
+1. Declare identity context explicitly
+2. Inject authority rules into agent prompts
+3. Enforce invariants defined in this document
+4. Reject outputs that violate authority boundaries
+
+---
+
+## Execution Modes
+
+* **init**
+
+  * Reason about identity, authority, and system structure
+  * NO code generation
+
+* **execute**
+
+  * Generate code strictly within approved authority rules
+
+(Additional modes may be added later.)
+
+---
+
+## Explicit Non-Goals
+
+This system does NOT:
+
+* allow subdomains to authorize requests
+* infer permissions from accounts
+* perform decentralized access control
+
+---
+
+## Precedence Rule
+
+If any instruction, prompt, or task conflicts with this document:
+
+**This document takes precedence.**

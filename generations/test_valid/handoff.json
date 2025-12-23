@@ -1,0 +1,10 @@
+[
+  {
+    "id": "TASK-001",
+    "category": "functional",
+    "title": "Valid Task",
+    "description": "This is a valid task",
+    "acceptance_criteria": ["Criteria 1"],
+    "passes": false
+  }
+]

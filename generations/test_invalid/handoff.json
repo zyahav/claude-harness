@@ -1,0 +1,8 @@
+[
+  {
+    "category": "invalid_category",
+    "description": "This task has an invalid category and is missing an ID",
+    "steps": ["Step 1"],
+    "passes": false
+  }
+]
