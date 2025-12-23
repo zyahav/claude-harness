@@ -32,6 +32,10 @@ class TestLifecycle(unittest.TestCase):
         # Configure git identity for CI environment where global config may be missing
         run_git_here(["config", "user.email", "test@example.com"])
         run_git_here(["config", "user.name", "Test User"])
+        
+        # Ensure we are on 'main' branch (git init might default to 'master' on some systems)
+        run_git_here(["checkout", "-B", "main"])
+        
         run_git_here(["remote", "add", "origin", str(self.origin_dir)])
         
         # Create an initial commit so we have a 'main' branch
