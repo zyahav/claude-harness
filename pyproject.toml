@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-harness"
+version = "0.1.0"
+description = "Autonomous Orchestrator for Coding Agents"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "Zuri Elyahav", email = "zuri@example.com"}
+]
+dependencies = [
+  "python-dotenv",
+  "claude-code-sdk"  # Assuming this is the SDK name based on imports
+]
+
+[project.scripts]
+harness = "harness:main"
+
+[tool.setuptools]
+py-modules = ["harness", "agent", "client", "lifecycle", "progress", "prompts", "schema", "security"]

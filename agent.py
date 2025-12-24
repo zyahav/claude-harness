@@ -16,6 +16,9 @@ from progress import print_session_header, print_progress_summary
 from prompts import get_initializer_prompt, get_coding_prompt, copy_spec_to_project
 import schema
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
@@ -39,7 +42,7 @@ async def run_agent_session(
         - "continue" if agent should continue working
         - "error" if an error occurred
     """
-    print("Sending prompt to Claude Agent SDK...\n")
+    logger.info("Sending prompt to Claude Agent SDK...\n")
 
     try:
         # Send the query
@@ -57,15 +60,15 @@ async def run_agent_session(
 
                     if block_type == "TextBlock" and hasattr(block, "text"):
                         response_text += block.text
-                        print(block.text, end="", flush=True)
+                        logger.info(block.text) # Using info for main text
                     elif block_type == "ToolUseBlock" and hasattr(block, "name"):
-                        print(f"\n[Tool: {block.name}]", flush=True)
+                        logger.info(f"\n[Tool: {block.name}]")
                         if hasattr(block, "input"):
                             input_str = str(block.input)
                             if len(input_str) > 200:
-                                print(f"   Input: {input_str[:200]}...", flush=True)
+                                logger.info(f"   Input: {input_str[:200]}...")
                             else:
-                                print(f"   Input: {input_str}", flush=True)
+                                logger.info(f"   Input: {input_str}")
 
             # Handle UserMessage (tool results)
             elif msg_type == "UserMessage" and hasattr(msg, "content"):
@@ -78,20 +81,20 @@ async def run_agent_session(
 
                         # Check if command was blocked by security hook
                         if "blocked" in str(result_content).lower():
-                            print(f"   [BLOCKED] {result_content}", flush=True)
+                            logger.warning(f"   [BLOCKED] {result_content}")
                         elif is_error:
                             # Show errors (truncated)
                             error_str = str(result_content)[:500]
-                            print(f"   [Error] {error_str}", flush=True)
+                            logger.error(f"   [Error] {error_str}")
                         else:
                             # Tool succeeded - just show brief confirmation
-                            print("   [Done]", flush=True)
+                            logger.info("   [Done]")
 
-        print("\n" + "-" * 70 + "\n")
+        logger.info("\n" + "-" * 70 + "\n")
         return "continue", response_text
 
     except Exception as e:
-        print(f"Error during agent session: {e}")
+        logger.error(f"Error during agent session: {e}", exc_info=True)
         return "error", str(e)
 
 
@@ -110,16 +113,16 @@ async def run_autonomous_agent(
         max_iterations: Maximum number of iterations (None for unlimited)
         spec_path: Path to the constitution/spec file (None for default)
     """
-    print("\n" + "=" * 70)
-    print("  AUTONOMOUS CODING AGENT DEMO")
-    print("=" * 70)
-    print(f"\nProject directory: {project_dir}")
-    print(f"Model: {model}")
+    logger.info("\n" + "=" * 70)
+    logger.info("  AUTONOMOUS CODING AGENT DEMO")
+    logger.info("=" * 70)
+    logger.info(f"\nProject directory: {project_dir}")
+    logger.info(f"Model: {model}")
     if max_iterations:
-        print(f"Max iterations: {max_iterations}")
+        logger.info(f"Max iterations: {max_iterations}")
     else:
-        print("Max iterations: Unlimited (will run until completion)")
-    print()
+        logger.info("Max iterations: Unlimited (will run until completion)")
+    logger.info("")
 
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -129,26 +132,26 @@ async def run_autonomous_agent(
     is_first_run = not tests_file.exists()
 
     if is_first_run:
-        print("Fresh start - will use initializer agent")
-        print()
-        print("=" * 70)
-        print("  NOTE: First session takes 10-20+ minutes!")
-        print("  The agent is generating 200 detailed test cases.")
-        print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
-        print("=" * 70)
-        print()
+        logger.info("Fresh start - will use initializer agent")
+        logger.info("")
+        logger.info("=" * 70)
+        logger.info("  NOTE: First session takes 10-20+ minutes!")
+        logger.info("  The agent is generating 200 detailed test cases.")
+        logger.info("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
+        logger.info("=" * 70)
+        logger.info("")
         # Copy the app spec into the project directory for the agent to read
         copy_spec_to_project(project_dir, spec_path)
     else:
-        print("Continuing existing project")
+        logger.info("Continuing existing project")
         
         # Validate schema before continuing
         errors = schema.validate_handoff_file(tests_file)
         if errors:
-            print(f"\nError: handoff.json is invalid:")
+            logger.error(f"\nError: handoff.json is invalid:")
             for error in errors:
-                print(f"  - {error}")
-            print("\nPlease fix the schema errors before continuing.")
+                logger.error(f"  - {error}")
+            logger.error("\nPlease fix the schema errors before continuing.")
             return
 
         print_progress_summary(project_dir)
@@ -156,16 +159,22 @@ async def run_autonomous_agent(
     # Main loop
     iteration = 0
 
+    # Main loop
+    iteration = 0
+    consecutive_errors = 0
+    backoff_seconds = 1
+
     while True:
         iteration += 1
 
         # Check max iterations
         if max_iterations and iteration > max_iterations:
-            print(f"\nReached max iterations ({max_iterations})")
-            print("To continue, run the script again without --max-iterations")
+            logger.info(f"\nReached max iterations ({max_iterations})")
+            logger.info("To continue, run the script again without --max-iterations")
             break
 
         # Print session header
+        # TODO: Update progress.py to use logging or capture its output
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context)
@@ -184,18 +193,29 @@ async def run_autonomous_agent(
 
         # Handle status
         if status == "continue":
-            print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
+            # Success! Reset backoff
+            consecutive_errors = 0
+            backoff_seconds = 1
+            
+            logger.info(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
             print_progress_summary(project_dir)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
         elif status == "error":
-            print("\nSession encountered an error")
-            print("Will retry with a fresh session...")
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+            consecutive_errors += 1
+            logger.error("\nSession encountered an error")
+            
+            if consecutive_errors > 5:
+                logger.critical("Too many consecutive errors. Aborting.")
+                break
+                
+            logger.warning(f"Retrying in {backoff_seconds}s... (Attempt {consecutive_errors}/5)")
+            await asyncio.sleep(backoff_seconds)
+            backoff_seconds *= 2  # Exponential backoff
 
-        # Small delay between sessions
-        if max_iterations is None or iteration < max_iterations:
-            print("\nPreparing next session...\n")
+        # Small delay between sessions if not error
+        if status != "error" and (max_iterations is None or iteration < max_iterations):
+            logger.info("\nPreparing next session...\n")
             await asyncio.sleep(1)
 
     # Final summary

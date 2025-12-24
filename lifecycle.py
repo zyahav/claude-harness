@@ -28,8 +28,12 @@ class RunMetadata:
     repo_path: str  # Added: path to the target repository
 
 
-def run_git(cmd: List[str], cwd: Optional[Path] = None) -> str:
+def run_git(cmd: List[str], cwd: Optional[Path] = None, dry_run: bool = False) -> str:
     """Run a git command and return output."""
+    if dry_run:
+        print(f"[DRY-RUN] git {' '.join(cmd)} (cwd={cwd})")
+        return ""
+
     try:
         # If cwd is not provided, use the current directory (Orchestrator root)
         # But if we are an orchestrator, we usually want to run git in the target repo.
@@ -46,7 +50,7 @@ def run_git(cmd: List[str], cwd: Optional[Path] = None) -> str:
         raise RuntimeError(f"Git command failed: {' '.join(cmd)}\n{e.stderr}")
 
 
-def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")) -> Path:
+def create_run(name: str, base_branch: str = "main", repo_path: Path = Path("."), dry_run: bool = False) -> Path:
     """
     Create a new run with an isolated worktree.
     
@@ -58,11 +62,12 @@ def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")
     run_dir = RUNS_DIR / name
     branch_name = f"run/{name}"
     
-    if run_dir.exists():
+    if run_dir.exists() and not dry_run:
         raise FileExistsError(f"Run directory {run_dir} already exists")
     
-    # ensure runs directory exists
-    RUNS_DIR.mkdir(exist_ok=True, parents=True)
+    if not dry_run:
+        # ensure runs directory exists
+        RUNS_DIR.mkdir(exist_ok=True, parents=True)
     
     print(f"Creating worktree for run '{name}'...")
     print(f"  Target Repo: {repo_path}")
@@ -70,8 +75,9 @@ def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")
     
     repo_path = Path(repo_path).resolve()
     
-    # Validate repo_path
-    if not (repo_path / ".git").exists():
+    # Validate repo_path (skip strict validation in dry_run if it might fail just because of access?)
+    # Actually validation is good even in dry run
+    if not dry_run and not (repo_path / ".git").exists():
         # It might be a worktree itself or a bare repo, but basic check
         # We can try running git status
         try:
@@ -85,7 +91,8 @@ def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")
     try:
         run_git(
             ["worktree", "add", "-b", branch_name, str(run_dir.resolve()), base_branch],
-            cwd=repo_path
+            cwd=repo_path,
+            dry_run=dry_run
         )
     except RuntimeError as e:
         if "already exists" in str(e):
@@ -93,18 +100,19 @@ def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")
         raise e
         
     # Create metadata
-    meta = RunMetadata(
-        name=name,
-        branch=branch_name,
-        created_at=time.time(),
-        status="active",
-        project_dir=str(run_dir.resolve()),
-        repo_path=str(repo_path)
-    )
-    
-    meta_path = run_dir / ".run.json"
-    with open(meta_path, "w") as f:
-        json.dump(asdict(meta), f, indent=2)
+    if not dry_run:
+        meta = RunMetadata(
+            name=name,
+            branch=branch_name,
+            created_at=time.time(),
+            status="active",
+            project_dir=str(run_dir.resolve()),
+            repo_path=str(repo_path)
+        )
+        
+        meta_path = run_dir / ".run.json"
+        with open(meta_path, "w") as f:
+            json.dump(asdict(meta), f, indent=2)
         
     print(f"Run '{name}' initialized at {run_dir}")
     return run_dir

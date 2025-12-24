@@ -27,10 +27,53 @@ load_dotenv()
 
 import lifecycle
 import schema
+import logging
+import json
+from datetime import datetime
 
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 DEFAULT_SPEC_PATH = Path("prompts/app_spec.txt")
+
+
+class JSONFormatter(logging.Formatter):
+    """Format logs as JSON lines."""
+    def format(self, record):
+        log_entry = {
+            "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.levelno >= logging.ERROR and record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_entry)
+
+
+def setup_logging(run_dir: Path) -> None:
+    """Configure structured logging to file and readable logging to console."""
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    
+    # clear existing handlers
+    root_logger.handlers = []
+
+    # 1. File Handler (JSONL) - captures everything
+    log_file = run_dir / "session.jsonl"
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(JSONFormatter())
+    root_logger.addHandler(file_handler)
+
+    # 2. Console Handler (Readable) - INFO and above
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    # Simple format for console to match previous print style
+    console_handler.setFormatter(logging.Formatter('%(message)s'))
+    root_logger.addHandler(console_handler)
+
+    logging.debug(f"Logging initialized. Writing to {log_file}")
+
 
 
 def handle_schema(args: argparse.Namespace) -> None:
@@ -63,13 +106,25 @@ def handle_schema(args: argparse.Namespace) -> None:
 
 def handle_start(args: argparse.Namespace) -> None:
     """Start a new run."""
-    print(f"Starting new run: {args.name}")
     try:
-        run_dir = lifecycle.create_run(args.name, args.base, repo_path=args.repo_path)
-        print(f"\nSuccess! Worktree created at: {run_dir}")
-        print(f"To run the agent:\n  python harness.py run {args.name} --repo-path {args.repo_path}")
+        if args.dry_run:
+            logging.info(f"[DRY-RUN] Would start run '{args.name}' from base '{args.base}'")
+        
+        run_dir = lifecycle.create_run(args.name, args.base, repo_path=args.repo_path, dry_run=args.dry_run)
+        
+        if args.dry_run:
+            logging.info(f"[DRY-RUN] Would create worktree at: {run_dir}")
+        else:
+            setup_logging(Path(run_dir))
+            logging.info(f"Starting new run: {args.name}")
+            logging.info(f"\nSuccess! Worktree created at: {run_dir}")
+            logging.info(f"To run the agent:\n  harness run {args.name} --repo-path {args.repo_path}")
     except Exception as e:
-        print(f"Error starting run: {e}")
+        # If logging isn't set up yet, fallback to print
+        if logging.getLogger().handlers:
+            logging.error(f"Error starting run: {e}")
+        else:
+            print(f"Error starting run: {e}")
         sys.exit(1)
 
 
@@ -77,12 +132,36 @@ def handle_run(args: argparse.Namespace) -> None:
     """Execute the agent in an existing run."""
     try:
         # Load run metadata to get the project directory
+        # In dry run, we might not have metadata if start was dry-run too.
+        # But run usually assumes valid existing run.
+        if args.dry_run:
+             logging.info(f"[DRY-RUN] Would resume run '{args.name}' with model '{args.model}'")
+             # Try to load if exists, else mock
+             try:
+                meta = lifecycle.load_run_metadata(args.name)
+                project_dir = Path(meta.project_dir)
+                logging.info(f"[DRY-RUN] Found run at {project_dir}, would execute agent.")
+             except Exception:
+                logging.info(f"[DRY-RUN] Could not load metadata (expected if start was dry-run).")
+             return
+
         meta = lifecycle.load_run_metadata(args.name)
         project_dir = Path(meta.project_dir)
         
-        print(f"Resuming run '{args.name}'")
-        print(f"Worktree: {project_dir}")
-        print(f"Branch: {meta.branch}")
+        # Setup logging first thing
+        setup_run_dir = Path(f"runs/{args.name}") 
+        
+        run_parent_dir = project_dir.parent
+        # Ensure it exists (it should)
+        if not run_parent_dir.exists():
+             # Fallback if structure is weird
+             run_parent_dir = project_dir
+             
+        setup_logging(run_parent_dir)
+
+        logging.info(f"Resuming run '{args.name}'")
+        logging.info(f"Worktree: {project_dir}")
+        logging.info(f"Branch: {meta.branch}")
         
         # Import agent here (lazy load)
         from agent import run_autonomous_agent
@@ -125,6 +204,10 @@ def handle_list(args: argparse.Namespace) -> None:
 
 def handle_finish(args: argparse.Namespace) -> None:
     """Finish a run: verify status and push branch."""
+    if args.dry_run:
+        logging.info(f"[DRY-RUN] Would finish run '{args.name}' and push branch.")
+        return
+
     try:
         meta = lifecycle.load_run_metadata(args.name)
         project_dir = Path(meta.project_dir)
@@ -183,7 +266,10 @@ def handle_clean(args: argparse.Namespace) -> None:
             return
 
     try:
-        lifecycle.cleanup_run(args.name, delete_branch=args.delete_branch)
+        if args.dry_run:
+            logging.info(f"[DRY-RUN] Would cleanup run '{args.name}' (delete_branch={args.delete_branch})")
+        else:
+            lifecycle.cleanup_run(args.name, delete_branch=args.delete_branch)
     except Exception as e:
         print(f"Error cleaning up run: {e}")
         sys.exit(1)
@@ -205,6 +291,7 @@ def main() -> None:
     start_parser.add_argument("name", help="Name of the run (used for branch and folder)")
     start_parser.add_argument("--base", default="main", help="Base branch to start from (default: main)")
     start_parser.add_argument("--repo-path", default=".", help="Path to the target repository (default: current dir)")
+    start_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     start_parser.set_defaults(func=handle_start)
 
     # RUN command
@@ -214,6 +301,7 @@ def main() -> None:
     run_parser.add_argument("--max-iterations", type=int, default=None, help="Limit iterations")
     run_parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC_PATH, help="Path to app spec")
     run_parser.add_argument("--repo-path", default=".", help="Path to the target repository (for context)")
+    run_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     run_parser.set_defaults(func=handle_run)
 
     # LIST command
@@ -226,13 +314,7 @@ def main() -> None:
     finish_parser.add_argument("--force", "-f", action="store_true", help="Finish even if tasks are incomplete")
     # Added --handoff-path here
     finish_parser.add_argument("--handoff-path", default=None, help="Path to handoff.json (default: project_dir/handoff.json)")
-    # Added --repo-path here, although we usually use the one in metadata
-    # But for consistency, and maybe overriding?
-    # Actually, finish just uses metadata. Adding repo-path to finish might be confusing if it conflicts with metadata.
-    # But the user request said: "Add --repo-path (default: .) to the start and run commands."
-    # It didn't strictly say Finish. But for Orchestrator Mode, `finish` reads metadata which HAS repo_path.
-    # So we don't strictly need --repo-path in finish. I'll omit it to avoid confusion, 
-    # as `handle_finish` uses `meta.repo_path`.
+    finish_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     finish_parser.set_defaults(func=handle_finish)
 
     # CLEAN command
@@ -241,6 +323,7 @@ def main() -> None:
     clean_parser.add_argument("--delete-branch", action="store_true", help="Also delete the git branch")
     clean_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
     clean_parser.add_argument("--repo-path", default=".", help="Path to the target repository (default: .)")
+    clean_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     clean_parser.set_defaults(func=handle_clean)
 
     args = parser.parse_args()
