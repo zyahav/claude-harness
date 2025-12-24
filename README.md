@@ -76,13 +76,16 @@ Removes the worktree and optionally deletes the local branch.
 python3 harness.py clean my-feature-run --delete-branch
 ```
 
-## Architecture
+## 🗺️ Repository Map (Agent-Ready)
 
-- **`harness.py`**: The main CLI dispatcher.
-- **`lifecycle.py`**: Handles Git worktree operations and metadata.
-- **`schema.py`**: Defines the `handoff.json` format and validation logic.
-- **`agent.py`**: Orchestrates the interaction between Claude and the SDK.
-- **`prompts/`**: Contains the system prompts for different agent roles.
+To ensure seamless integration for both humans and AI agents, here is the architectural map:
+
+- **Core Logic:** `harness.py` (CLI entry point) and `lifecycle.py` (Git worktree management).
+- **Agent Intelligence:** `agent.py` (The interface for Claude/LLMs).
+- **Quality Gate (CI/CD):** Located in `.github/workflows/tests.yml`. Runs pytest on every push.
+- **Testing Suite:** Located in `tests/`. Includes `test_orchestrator.py` for cross-directory validation.
+- **Agent Guide:** `AGENT_GUIDE.md` (Specific instructions for LLMs driving this tool).
+- **Schema:** `schema.py` defines the `handoff.json` structure.
 
 ## Testing
 

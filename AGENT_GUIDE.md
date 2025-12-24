@@ -7,11 +7,21 @@ This guide is written for Autonomous LLM Agents. It details the repository archi
 `claude-harness` is an **Orchestrator** tool. It manages *other* Git repositories.
 You should almost never modify `claude-harness` itself. Instead, you use it to manage **Target Repositories**.
 
+## 0. Credential Handling
+
+This agent requires the following environment variables to be **transported** into the runtime.
+**DO NOT store these in local files or `.env` inside the worktree.**
+
+- `ANTHROPIC_API_KEY` (Required for intelligence)
+- `GITHUB_TOKEN` (Required for PR operations, if applicable)
+
+**Protocol:** Export these variables in your shell before running `harness`.
+
 ## 2. Core Architecture
 
 - **`harness.py`**: The CLI entry point. YOU CALL THIS.
 - **`lifecycle.py`**: Git worktree and branch management.
-- **`schema.py`**: The validator for `handoff.json`.
+- **`schema.py`**: The validator for `handoff.json`. **Note:** Uses Python `dataclasses` (Standard Library) for dependency-free validation. Not Pydantic.
 
 ## 3. Standard Operating Procedures
 
