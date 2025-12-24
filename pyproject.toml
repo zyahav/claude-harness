@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-harness = "harness:main"
+c-harness = "harness:main"
 
 [tool.setuptools]
 py-modules = ["harness", "agent", "client", "lifecycle", "progress", "prompts", "schema", "security"]
