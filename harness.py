@@ -65,9 +65,9 @@ def handle_start(args: argparse.Namespace) -> None:
     """Start a new run."""
     print(f"Starting new run: {args.name}")
     try:
-        run_dir = lifecycle.create_run(args.name, args.base)
+        run_dir = lifecycle.create_run(args.name, args.base, repo_path=args.repo_path)
         print(f"\nSuccess! Worktree created at: {run_dir}")
-        print(f"To run the agent:\n  python harness.py run {args.name}")
+        print(f"To run the agent:\n  python harness.py run {args.name} --repo-path {args.repo_path}")
     except Exception as e:
         print(f"Error starting run: {e}")
         sys.exit(1)
@@ -128,11 +128,18 @@ def handle_finish(args: argparse.Namespace) -> None:
     try:
         meta = lifecycle.load_run_metadata(args.name)
         project_dir = Path(meta.project_dir)
-        handoff_path = project_dir / "handoff.json"
+        
+        # Resolve handoff path:
+        # 1. Custom path (CLI arg)
+        # 2. Default: project_dir / "handoff.json"
+        if args.handoff_path:
+            handoff_path = Path(args.handoff_path).resolve()
+        else:
+            handoff_path = project_dir / "handoff.json"
         
         # Verify handoff.json
         if not handoff_path.exists():
-            print("Error: handoff.json not found. Has the agent started?")
+            print(f"Error: handoff.json not found at {handoff_path}")
             sys.exit(1)
             
         handoff = schema.load_handoff(handoff_path)
@@ -148,7 +155,9 @@ def handle_finish(args: argparse.Namespace) -> None:
             
         print(f"\nPushing branch {meta.branch}...")
         try:
-            lifecycle.run_git(["push", "origin", meta.branch, "--force"])
+            # Push from the TARGET REPO (repo_path), not the harness dir
+            repo_path = Path(getattr(meta, "repo_path", "."))
+            lifecycle.run_git(["push", "origin", meta.branch, "--force"], cwd=repo_path)
         except RuntimeError as e:
             print(f"Error pushing branch: {e}")
             sys.exit(1)
@@ -195,6 +204,7 @@ def main() -> None:
     start_parser = subparsers.add_parser("start", help="Start a new agent run (creates worktree)")
     start_parser.add_argument("name", help="Name of the run (used for branch and folder)")
     start_parser.add_argument("--base", default="main", help="Base branch to start from (default: main)")
+    start_parser.add_argument("--repo-path", default=".", help="Path to the target repository (default: current dir)")
     start_parser.set_defaults(func=handle_start)
 
     # RUN command
@@ -203,6 +213,7 @@ def main() -> None:
     run_parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use (default: {DEFAULT_MODEL})")
     run_parser.add_argument("--max-iterations", type=int, default=None, help="Limit iterations")
     run_parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC_PATH, help="Path to app spec")
+    run_parser.add_argument("--repo-path", default=".", help="Path to the target repository (for context)")
     run_parser.set_defaults(func=handle_run)
 
     # LIST command
@@ -213,6 +224,15 @@ def main() -> None:
     finish_parser = subparsers.add_parser("finish", help="Finish a run (push branch)")
     finish_parser.add_argument("name", help="Name of the run to finish")
     finish_parser.add_argument("--force", "-f", action="store_true", help="Finish even if tasks are incomplete")
+    # Added --handoff-path here
+    finish_parser.add_argument("--handoff-path", default=None, help="Path to handoff.json (default: project_dir/handoff.json)")
+    # Added --repo-path here, although we usually use the one in metadata
+    # But for consistency, and maybe overriding?
+    # Actually, finish just uses metadata. Adding repo-path to finish might be confusing if it conflicts with metadata.
+    # But the user request said: "Add --repo-path (default: .) to the start and run commands."
+    # It didn't strictly say Finish. But for Orchestrator Mode, `finish` reads metadata which HAS repo_path.
+    # So we don't strictly need --repo-path in finish. I'll omit it to avoid confusion, 
+    # as `handle_finish` uses `meta.repo_path`.
     finish_parser.set_defaults(func=handle_finish)
 
     # CLEAN command
@@ -220,6 +240,7 @@ def main() -> None:
     clean_parser.add_argument("name", help="Name of the run to clean")
     clean_parser.add_argument("--delete-branch", action="store_true", help="Also delete the git branch")
     clean_parser.add_argument("--force", "-f", action="store_true", help="Skip confirmation")
+    clean_parser.add_argument("--repo-path", default=".", help="Path to the target repository (default: .)")
     clean_parser.set_defaults(func=handle_clean)
 
     args = parser.parse_args()

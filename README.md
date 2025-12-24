@@ -9,6 +9,11 @@ A robust CLI harness for running long-running autonomous coding agents using Cla
 - **Schema Validation:** Ensures `handoff.json` remains valid and follows the canonical project format.
 - **Resilient CLI:** Lazy loading of heavy dependencies (like the Claude SDK) for fast help and validation.
 
+## Quick Links
+
+- **[🤖 Agent Guide](AGENT_GUIDE.md)**: Strictly formatted guide for autonomous agents.
+- **[Architectural Decision Records](docs/)**: detailed design documents.
+
 ## Installation
 
 ```bash
@@ -23,7 +28,21 @@ pip install -r requirements.txt
 pip install -r requirements-sdk.txt
 ```
 
-## Usage
+## Quick Start (Orchestrator Mode)
+
+The recommended way to use `claude-harness` is as an external orchestrator managing other repositories.
+
+```bash
+# 1. Start a new run for an external repo
+python3 harness.py start my-task --repo-path ../target-repo
+
+# 2. Do your work in the new worktree: runs/my-task
+
+# 3. Finish and push
+python3 harness.py finish my-task --repo-path ../target-repo --handoff-path ../handoff.json
+```
+
+## Usage (Resident Mode)
 
 The `harness.py` script is the main entry point. Use subcommands to manage the agent lifecycle.
 

@@ -25,11 +25,15 @@ class RunMetadata:
     created_at: float
     status: str  # "active", "finished", "failed"
     project_dir: str
+    repo_path: str  # Added: path to the target repository
 
 
 def run_git(cmd: List[str], cwd: Optional[Path] = None) -> str:
     """Run a git command and return output."""
     try:
+        # If cwd is not provided, use the current directory (Orchestrator root)
+        # But if we are an orchestrator, we usually want to run git in the target repo.
+        # This function is generic, but callers should be careful.
         result = subprocess.run(
             ["git"] + cmd,
             cwd=cwd,
@@ -42,14 +46,15 @@ def run_git(cmd: List[str], cwd: Optional[Path] = None) -> str:
         raise RuntimeError(f"Git command failed: {' '.join(cmd)}\n{e.stderr}")
 
 
-def create_run(name: str, base_branch: str = "main") -> Path:
+def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")) -> Path:
     """
     Create a new run with an isolated worktree.
     
-    1. Create branch run/<name> from base_branch
-    2. Create worktree at runs/<name>
+    1. Create branch run/<name> in target repo (repo_path)
+    2. Create worktree at runs/<name> (in Harness dir)
     3. Initialize metadata
     """
+    # Runs are stored relative to the Harness, not the target repo
     run_dir = RUNS_DIR / name
     branch_name = f"run/{name}"
     
@@ -57,14 +62,31 @@ def create_run(name: str, base_branch: str = "main") -> Path:
         raise FileExistsError(f"Run directory {run_dir} already exists")
     
     # ensure runs directory exists
-    RUNS_DIR.mkdir(exist_ok=True)
+    RUNS_DIR.mkdir(exist_ok=True, parents=True)
     
     print(f"Creating worktree for run '{name}'...")
+    print(f"  Target Repo: {repo_path}")
+    print(f"  Worktree:    {run_dir}")
     
+    repo_path = Path(repo_path).resolve()
+    
+    # Validate repo_path
+    if not (repo_path / ".git").exists():
+        # It might be a worktree itself or a bare repo, but basic check
+        # We can try running git status
+        try:
+            run_git(["status"], cwd=repo_path)
+        except Exception:
+             raise ValueError(f"Invalid git repository at {repo_path}")
+
     # Create worktree and branch
     # git worktree add -b <branch> <path> <start-point>
+    # We must run this FROM the target repo, point to the absolute path of the new worktree
     try:
-        run_git(["worktree", "add", "-b", branch_name, str(run_dir), base_branch])
+        run_git(
+            ["worktree", "add", "-b", branch_name, str(run_dir.resolve()), base_branch],
+            cwd=repo_path
+        )
     except RuntimeError as e:
         if "already exists" in str(e):
              raise FileExistsError(f"Branch {branch_name} already exists. Choose a different run name.")
@@ -76,7 +98,8 @@ def create_run(name: str, base_branch: str = "main") -> Path:
         branch=branch_name,
         created_at=time.time(),
         status="active",
-        project_dir=str(run_dir.resolve())
+        project_dir=str(run_dir.resolve()),
+        repo_path=str(repo_path)
     )
     
     meta_path = run_dir / ".run.json"
@@ -95,6 +118,11 @@ def load_run_metadata(run_name: str) -> RunMetadata:
         
     with open(meta_path, "r") as f:
         data = json.load(f)
+    
+    # Handle backward compatibility for old runs (missing repo_path)
+    if "repo_path" not in data:
+        data["repo_path"] = "." 
+        
     return RunMetadata(**data)
 
 
@@ -121,15 +149,31 @@ def cleanup_run(name: str, delete_branch: bool = False) -> None:
     branch_name = f"run/{name}"
     
     if not run_dir.exists():
-        # Check if it's just a git worktree prune candidate
-        run_git(["worktree", "prune"])
+        # If the directory is gone, we might still want to clean up the worktree entry directly
+        # But we need valid RunMetadata to know where the repo was... 
+        # For now, simplistic approach: if run_dir is gone, we can't easily clean up the git entry 
+        # unless we saved that info elsewhere.
+        # But if the user says "clean foo", we assume they mean the one in runs/foo.
+        print(f"Run directory {run_dir} not found.")
         return
+
+    # Load metadata to find the repo path
+    try:
+        meta = load_run_metadata(name)
+        repo_path = Path(meta.repo_path)
+    except Exception:
+        print("Warning: Could not load metadata. Assuming local repo.")
+        repo_path = Path(".")
 
     print(f"Cleaning up run '{name}'...")
     
     # Remove worktree using git
-    # This automatically removes the directory
-    run_git(["worktree", "remove", str(run_dir), "--force"])
+    # We must run this from the target repo
+    try:
+        run_git(["worktree", "remove", str(run_dir.resolve()), "--force"], cwd=repo_path)
+    except Exception as e:
+        print(f"Warning: git worktree remove failed: {e}")
+        # Continue to force delete directory
     
     # Double check directory is gone
     if run_dir.exists():
@@ -138,8 +182,9 @@ def cleanup_run(name: str, delete_branch: bool = False) -> None:
     if delete_branch:
         print(f"Deleting branch {branch_name}...")
         try:
-            run_git(["branch", "-D", branch_name])
+            run_git(["branch", "-D", branch_name], cwd=repo_path)
         except RuntimeError as e:
             print(f"Warning: Could not delete branch {branch_name}: {e}")
             
     print(f"Run '{name}' cleanup complete")
+
