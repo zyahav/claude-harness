@@ -19,7 +19,8 @@ This agent requires the following environment variables to be **transported** in
 
 ## 2. Core Architecture
 
-- **`harness.py`**: The CLI entry point. YOU CALL THIS.
+- **`c-harness`**: The CLI entry point (installed via `pip`). YOU CALL THIS.
+- **`harness.py`**: The raw script (developer fallback).
 - **`lifecycle.py`**: Git worktree and branch management.
 - **`schema.py`**: The validator for `handoff.json`. **Note:** Uses Python `dataclasses` (Standard Library) for dependency-free validation. Not Pydantic.
 
@@ -29,8 +30,9 @@ This agent requires the following environment variables to be **transported** in
 
 Command:
 ```bash
-python3 harness.py start <task-name> --repo-path <path/to/target-repo>
+c-harness start <task-name> --repo-path <path/to/target-repo>
 ```
+> **Developer Note:** If `c-harness` is not in your PATH, you can use `python3 harness.py ...` instead.
 - **Effect:** Creates a new git worktree in `runs/<task-name>` and a branch `run/<task-name>` in the target repo.
 - **Output:** Returns the path to the NEW worktree.
 - **Next Step:** Do your work inside that new worktree path.
@@ -39,7 +41,7 @@ python3 harness.py start <task-name> --repo-path <path/to/target-repo>
 
 Command:
 ```bash
-python3 harness.py run <task-name> --repo-path <path/to/target-repo>
+c-harness run <task-name> --repo-path <path/to/target-repo>
 ```
 - **Effect:** Runs the automated agent loop (if configured). Usually, you (the LLM) *are* the agent, so you might skip this and just edit files directly in the worktree.
 
@@ -47,7 +49,7 @@ python3 harness.py run <task-name> --repo-path <path/to/target-repo>
 
 Command:
 ```bash
-python3 harness.py finish <task-name> --repo-path <path/to/target-repo> --handoff-path <path/to/handoff.json>
+c-harness finish <task-name> --repo-path <path/to/target-repo> --handoff-path <path/to/handoff.json>
 ```
 - **Effect:**
     1. Validates the `handoff.json` file against strict schema.

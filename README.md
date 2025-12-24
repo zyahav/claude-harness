@@ -25,7 +25,11 @@ cd claude-harness
 pip install -r requirements.txt
 
 # For full agent functionality (requires access to private SDK):
+# For full agent functionality (requires access to private SDK):
 pip install -r requirements-sdk.txt
+
+# Install the tool in editable mode to get the 'c-harness' command:
+pip install -e .
 ```
 
 ## Quick Start (Orchestrator Mode)
@@ -34,46 +38,47 @@ The recommended way to use `claude-harness` is as an external orchestrator manag
 
 ```bash
 # 1. Start a new run for an external repo
-python3 harness.py start my-task --repo-path ../target-repo
+# 1. Start a new run for an external repo
+c-harness start my-task --repo-path ../target-repo
 
 # 2. Do your work in the new worktree: runs/my-task
 
 # 3. Finish and push
-python3 harness.py finish my-task --repo-path ../target-repo --handoff-path ../handoff.json
+c-harness finish my-task --repo-path ../target-repo --handoff-path ../handoff.json
 ```
 
 ## Usage (Resident Mode)
 
-The `harness.py` script is the main entry point. Use subcommands to manage the agent lifecycle.
+The `c-harness` command (or `harness.py` script) is the main entry point. Use subcommands to manage the agent lifecycle.
 
 ### 1. Start a new run
 Creates a new branch and an isolated worktree in the `runs/` directory.
 ```bash
-python3 harness.py start my-feature-run
+c-harness start my-feature-run
 ```
 
 ### 2. List active runs
 Shows all runs, their status, and creation time.
 ```bash
-python3 harness.py list
+c-harness list
 ```
 
 ### 3. Execute the agent
 Runs the autonomous agent loop inside the specified worktree.
 ```bash
-python3 harness.py run my-feature-run
+c-harness run my-feature-run
 ```
 
 ### 4. Finish a run
 Verifies all tasks are complete, pushes the branch to the remote repository, and provides PR instructions.
 ```bash
-python3 harness.py finish my-feature-run
+c-harness finish my-feature-run
 ```
 
 ### 5. Clean up
 Removes the worktree and optionally deletes the local branch.
 ```bash
-python3 harness.py clean my-feature-run --delete-branch
+c-harness clean my-feature-run --delete-branch
 ```
 
 ## 🗺️ Repository Map (Agent-Ready)
