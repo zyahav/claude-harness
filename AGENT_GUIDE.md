@@ -12,8 +12,8 @@ You should almost never modify `claude-harness` itself. Instead, you use it to m
 This agent requires the following environment variables to be **transported** into the runtime.
 **DO NOT store these in local files or `.env` inside the worktree.**
 
-- `ANTHROPIC_API_KEY` (Required for intelligence)
-- `GITHUB_TOKEN` (Required for PR operations, if applicable)
+- `ANTHROPIC_API_KEY` (Option 1: Basic Auth)
+- `CLAUDE_CODE_OAUTH_TOKEN` (Option 2: OAuth / `claude login`)
 
 **Protocol:** Export these variables in your shell before running `harness`.
 
