@@ -15,10 +15,14 @@ from client import create_client
 from progress import print_session_header, print_progress_summary
 from prompts import get_initializer_prompt, get_prompt_for_mode, copy_spec_to_project
 import schema
+import archon_integration
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Global Archon reference for current session
+_archon_project: Optional[archon_integration.ArchonProject] = None
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
@@ -117,6 +121,17 @@ async def run_autonomous_agent(
         mode: 'greenfield' (new project) or 'brownfield' (existing codebase)
         handoff_path: Path to handoff.json for brownfield mode (None for default: <worktree>/handoff.json)
     """
+    global _archon_project
+    
+    # Load Archon reference if available (graceful fallback if not)
+    _archon_project = archon_integration.load_archon_reference(project_dir)
+    if _archon_project:
+        logger.info(f"Archon integration active: {_archon_project.title}")
+        logger.info(f"  Project ID: {_archon_project.project_id}")
+        logger.info(f"  Task mappings: {len(_archon_project.task_ids)}")
+    else:
+        logger.debug("No Archon integration (no .run.json or no archon section)")
+    
     mode_label = "GREENFIELD" if mode == "greenfield" else "BROWNFIELD"
     logger.info("\n" + "=" * 70)
     logger.info(f"  AUTONOMOUS CODING AGENT ({mode_label})")
