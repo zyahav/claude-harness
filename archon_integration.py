@@ -32,6 +32,123 @@ class ArchonProject:
     task_ids: dict[str, str]  # handoff_task_id -> archon_task_id
 
 
+class ArchonMCPClient:
+    """Client for communicating with Archon MCP server."""
+    
+    def __init__(self, url: str = ARCHON_MCP_URL):
+        self.url = url
+        self.session_id: Optional[str] = None
+        self._client = None
+    
+    def _get_client(self):
+        if self._client is None:
+            import httpx
+            self._client = httpx.Client(timeout=30)
+        return self._client
+    
+    def _headers(self):
+        headers = {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        }
+        if self.session_id:
+            headers["Mcp-Session-Id"] = self.session_id
+        return headers
+    
+    def initialize(self) -> bool:
+        """Initialize MCP session."""
+        try:
+            client = self._get_client()
+            init_request = {
+                "jsonrpc": "2.0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "c-harness", "version": "0.1.0"}
+                },
+                "id": "init"
+            }
+            
+            response = client.post(self.url, json=init_request, headers=self._headers())
+            if response.status_code != 200:
+                logger.error(f"MCP init failed: {response.status_code}")
+                return False
+            
+            self.session_id = response.headers.get("mcp-session-id")
+            if not self.session_id:
+                logger.error("No session ID received")
+                return False
+            
+            # Send initialized notification
+            notif = {"jsonrpc": "2.0", "method": "notifications/initialized"}
+            client.post(self.url, json=notif, headers=self._headers())
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"MCP init error: {e}")
+            return False
+    
+    def call_tool(self, tool_name: str, arguments: dict) -> dict:
+        """Call an MCP tool and return the result."""
+        if not self.session_id:
+            if not self.initialize():
+                return {"success": False, "error": "Failed to initialize MCP session"}
+        
+        try:
+            client = self._get_client()
+            tool_call = {
+                "jsonrpc": "2.0",
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": arguments},
+                "id": "tool"
+            }
+            
+            response = client.post(self.url, json=tool_call, headers=self._headers())
+            if response.status_code != 200:
+                return {"success": False, "error": f"HTTP {response.status_code}"}
+            
+            # Parse SSE response
+            for line in response.text.split('\n'):
+                if line.startswith('data: '):
+                    data = json.loads(line[6:])
+                    if 'result' in data:
+                        content = data['result'].get('content', [])
+                        if content:
+                            try:
+                                result = json.loads(content[0]['text'])
+                                return {"success": True, **result}
+                            except json.JSONDecodeError:
+                                return {"success": True, "text": content[0]['text']}
+                    elif 'error' in data:
+                        return {"success": False, "error": data['error']}
+            
+            return {"success": False, "error": "No result in response"}
+            
+        except Exception as e:
+            logger.error(f"Tool call failed: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def close(self):
+        """Close the client."""
+        if self._client:
+            self._client.close()
+            self._client = None
+
+
+# Global client instance
+_archon_client: Optional[ArchonMCPClient] = None
+
+
+def get_archon_client() -> ArchonMCPClient:
+    """Get or create the Archon MCP client."""
+    global _archon_client
+    if _archon_client is None:
+        _archon_client = ArchonMCPClient()
+    return _archon_client
+
+
 def is_archon_available() -> bool:
     """Check if Archon MCP server is running."""
     try:
@@ -46,54 +163,9 @@ def is_archon_available() -> bool:
 
 
 def call_archon_tool(tool_name: str, arguments: dict) -> dict:
-    """
-    Call an Archon MCP tool via mcp-remote.
-    
-    This uses the mcp-remote CLI to invoke tools on the Archon server.
-    """
-    try:
-        import requests
-        
-        # For now, use direct HTTP API if available
-        # The Archon server exposes REST endpoints
-        
-        if tool_name == "manage_project":
-            if arguments.get("action") == "create":
-                # POST to create project
-                response = requests.post(
-                    ARCHON_MCP_URL.replace("/mcp", "/api/projects"),
-                    json={
-                        "title": arguments.get("title"),
-                        "description": arguments.get("description", ""),
-                        "github_repo": arguments.get("github_repo"),
-                    },
-                    timeout=10
-                )
-                if response.status_code in (200, 201):
-                    return {"success": True, "project": response.json()}
-                    
-        elif tool_name == "manage_task":
-            if arguments.get("action") == "create":
-                response = requests.post(
-                    ARCHON_MCP_URL.replace("/mcp", "/api/tasks"),
-                    json={
-                        "project_id": arguments.get("project_id"),
-                        "title": arguments.get("title"),
-                        "description": arguments.get("description", ""),
-                        "status": arguments.get("status", "todo"),
-                        "feature": arguments.get("feature"),
-                        "assignee": arguments.get("assignee", "Archon"),
-                    },
-                    timeout=10
-                )
-                if response.status_code in (200, 201):
-                    return {"success": True, "task": response.json()}
-                    
-        return {"success": False, "error": "Unknown tool or action"}
-        
-    except Exception as e:
-        logger.error(f"Failed to call Archon tool {tool_name}: {e}")
-        return {"success": False, "error": str(e)}
+    """Call an Archon MCP tool."""
+    client = get_archon_client()
+    return client.call_tool(tool_name, arguments)
 
 
 def create_archon_project(
@@ -101,17 +173,7 @@ def create_archon_project(
     run_id: str,
     github_repo: Optional[str] = None,
 ) -> Optional[str]:
-    """
-    Create an Archon project for a c-harness run.
-    
-    Args:
-        repo_name: Name of the target repository
-        run_id: The run ID (e.g., TEST-001)
-        github_repo: Optional GitHub URL
-        
-    Returns:
-        project_id if successful, None otherwise
-    """
+    """Create an Archon project for a c-harness run."""
     title = f"{repo_name} / {run_id}"
     description = f"c-harness run: {run_id} on {repo_name}"
     
@@ -125,26 +187,17 @@ def create_archon_project(
     if result.get("success") and result.get("project"):
         project_id = result["project"].get("id")
         logger.info(f"Created Archon project: {title} ({project_id})")
+        print(f"  Archon project: {title}")
+        print(f"  Project ID: {project_id}")
         return project_id
     else:
         logger.warning(f"Failed to create Archon project: {result.get('error')}")
+        print(f"  Warning: Failed to create Archon project: {result.get('error')}")
         return None
 
 
-def import_handoff_tasks(
-    project_id: str,
-    handoff_path: Path,
-) -> dict[str, str]:
-    """
-    Import tasks from handoff.json into Archon.
-    
-    Args:
-        project_id: Archon project ID
-        handoff_path: Path to handoff.json
-        
-    Returns:
-        Mapping of handoff task IDs to Archon task IDs
-    """
+def import_handoff_tasks(project_id: str, handoff_path: Path) -> dict[str, str]:
+    """Import tasks from handoff.json into Archon."""
     task_mapping = {}
     
     try:
@@ -163,7 +216,6 @@ def import_handoff_tasks(
         category = task.get("category", "functional")
         passes = task.get("passes", False)
         
-        # Build description with acceptance criteria
         full_description = description
         criteria = task.get("acceptance_criteria", [])
         if criteria:
@@ -187,7 +239,7 @@ def import_handoff_tasks(
         else:
             logger.warning(f"Failed to import task {task_id}: {result.get('error')}")
             
-    logger.info(f"Imported {len(task_mapping)}/{len(tasks)} tasks to Archon")
+    print(f"  Imported {len(task_mapping)}/{len(tasks)} tasks to Archon")
     return task_mapping
 
 
@@ -196,24 +248,14 @@ def setup_archon_for_run(
     run_id: str,
     handoff_path: Optional[Path] = None,
 ) -> Optional[ArchonProject]:
-    """
-    Set up Archon integration for a c-harness run.
-    
-    Args:
-        repo_path: Path to the target repository
-        run_id: The run ID
-        handoff_path: Path to handoff.json (optional)
-        
-    Returns:
-        ArchonProject if successful, None otherwise
-    """
+    """Set up Archon integration for a c-harness run."""
     if not is_archon_available():
         logger.info("Archon not available, skipping integration")
         return None
-        
+    
+    print("Setting up Archon integration...")
     repo_name = repo_path.name
     
-    # Try to get GitHub URL from git remote
     github_repo = None
     try:
         result = subprocess.run(
@@ -227,12 +269,10 @@ def setup_archon_for_run(
     except Exception:
         pass
         
-    # Create project
     project_id = create_archon_project(repo_name, run_id, github_repo)
     if not project_id:
         return None
         
-    # Import tasks if handoff exists
     task_mapping = {}
     if handoff_path and handoff_path.exists():
         task_mapping = import_handoff_tasks(project_id, handoff_path)
@@ -248,7 +288,6 @@ def save_archon_reference(run_dir: Path, archon_project: ArchonProject) -> None:
     """Save Archon project reference to .run.json."""
     run_json_path = run_dir / ".run.json"
     
-    # Load existing or create new
     run_data = {}
     if run_json_path.exists():
         try:
@@ -257,7 +296,6 @@ def save_archon_reference(run_dir: Path, archon_project: ArchonProject) -> None:
         except Exception:
             pass
             
-    # Add Archon reference
     run_data["archon"] = {
         "project_id": archon_project.project_id,
         "title": archon_project.title,
@@ -266,8 +304,6 @@ def save_archon_reference(run_dir: Path, archon_project: ArchonProject) -> None:
     
     with open(run_json_path, "w") as f:
         json.dump(run_data, f, indent=2)
-        
-    logger.info(f"Saved Archon reference to {run_json_path}")
 
 
 def load_archon_reference(run_dir: Path) -> Optional[ArchonProject]:
