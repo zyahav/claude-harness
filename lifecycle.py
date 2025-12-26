@@ -4,6 +4,8 @@ Lifecycle Management
 
 Manages the lifecycle of autonomous agent runs using Git worktrees.
 Each run gets its own isolated worktree and branch.
+
+Optional Archon integration for visibility into agent runs.
 """
 
 import json
@@ -50,13 +52,21 @@ def run_git(cmd: List[str], cwd: Optional[Path] = None, dry_run: bool = False) -
         raise RuntimeError(f"Git command failed: {' '.join(cmd)}\n{e.stderr}")
 
 
-def create_run(name: str, base_branch: str = "main", repo_path: Path = Path("."), dry_run: bool = False) -> Path:
+def create_run(
+    name: str,
+    base_branch: str = "main",
+    repo_path: Path = Path("."),
+    dry_run: bool = False,
+    archon: bool = False,
+    handoff_path: Optional[Path] = None,
+) -> Path:
     """
     Create a new run with an isolated worktree.
     
     1. Create branch run/<name> in target repo (repo_path)
     2. Create worktree at runs/<name> (in Harness dir)
     3. Initialize metadata
+    4. Optionally create Archon project for visibility
     """
     # Runs are stored relative to the Harness, not the target repo
     run_dir = RUNS_DIR / name
@@ -113,6 +123,24 @@ def create_run(name: str, base_branch: str = "main", repo_path: Path = Path(".")
         meta_path = run_dir / ".run.json"
         with open(meta_path, "w") as f:
             json.dump(asdict(meta), f, indent=2)
+    
+    # Archon integration: create project for visibility
+    if archon and not dry_run:
+        try:
+            from archon_integration import setup_archon_for_run, save_archon_reference
+            
+            archon_project = setup_archon_for_run(
+                repo_path=repo_path,
+                run_id=name,
+                handoff_path=handoff_path,
+            )
+            if archon_project:
+                save_archon_reference(run_dir, archon_project)
+                print(f"  Archon project: {archon_project.title}")
+        except ImportError:
+            print("Warning: archon_integration module not available")
+        except Exception as e:
+            print(f"Warning: Archon integration failed: {e}")
         
     print(f"Run '{name}' initialized at {run_dir}")
     return run_dir
