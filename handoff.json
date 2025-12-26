@@ -99,7 +99,7 @@
         "Worktree path safety (normalize, allowlist, marker check)",
         "Unit tests for reconciliation scenarios"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["reconcile.py", "tests/test_reconcile.py"],
       "steps": [
         "Create reconcile.py with Reconciler class",
