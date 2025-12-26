@@ -6,8 +6,11 @@ Core agent interaction functions for running autonomous coding sessions.
 """
 
 import asyncio
+import json
+import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Callable
 
 # from claude_code_sdk import ClaudeSDKClient
 
@@ -19,6 +22,15 @@ import archon_integration
 
 import logging
 
+# Try to import watchdog for file watching
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler, FileModifiedEvent
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
+    logger.warning("watchdog not available - file watching disabled")
+
 logger = logging.getLogger(__name__)
 
 # Global Archon reference for current session
@@ -26,6 +38,174 @@ _archon_project: Optional[archon_integration.ArchonProject] = None
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
+
+
+# =============================================================================
+# File Watching for Real-time Task Tracking
+# =============================================================================
+
+class HandoffFileHandler(FileSystemEventHandler):
+    """
+    Handler for handoff.json file modification events.
+    """
+
+    def __init__(self, handoff_path: Path, callback: Callable[[dict], None]):
+        """
+        Initialize the file handler.
+
+        Args:
+            handoff_path: Path to handoff.json file
+            callback: Function to call when file changes (receives parsed JSON content)
+        """
+        self.handoff_path = handoff_path
+        self.callback = callback
+        self._last_content = None
+        self._last_modified = 0
+
+        # Read initial content to avoid immediate false trigger
+        if handoff_path.exists():
+            try:
+                with open(handoff_path, 'r') as f:
+                    self._last_content = f.read()
+                self._last_modified = time.time()
+            except Exception:
+                pass
+
+    def on_modified(self, event):
+        """Called when file is modified."""
+        if event.is_directory:
+            return
+
+        # Check if it's the handoff.json file
+        if Path(event.src_path) != self.handoff_path:
+            return
+
+        # Debounce rapid successive changes (ignore changes within 1 second)
+        current_time = time.time()
+        if current_time - self._last_modified < 1.0:
+            return
+
+        try:
+            # Read new content
+            with open(self.handoff_path, 'r') as f:
+                new_content = f.read()
+
+            # Only trigger if content actually changed
+            if new_content != self._last_content:
+                self._last_content = new_content
+                self._last_modified = current_time
+
+                # Parse JSON and call callback
+                data = json.loads(new_content)
+                logger.debug(f"handoff.json modified, invoking callback")
+                self.callback(data)
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid JSON in handoff.json: {e}")
+        except Exception as e:
+            logger.warning(f"Error reading handoff.json: {e}")
+
+
+class HandoffFileWatcher:
+    """
+    File watcher for monitoring handoff.json changes.
+    Uses watchdog if available, otherwise uses polling.
+    """
+
+    def __init__(self, handoff_path: Path, callback: Callable[[dict], None]):
+        """
+        Initialize the file watcher.
+
+        Args:
+            handoff_path: Path to handoff.json file
+            callback: Function to call when file changes (receives parsed JSON content)
+        """
+        self.handoff_path = handoff_path
+        self.callback = callback
+        self._observer = None
+        self._polling_thread = None
+        self._polling_active = False
+        self._last_content = None
+
+        # Read initial content
+        if handoff_path.exists():
+            try:
+                with open(handoff_path, 'r') as f:
+                    self._last_content = f.read()
+            except Exception:
+                pass
+
+    def start(self):
+        """Start watching the file."""
+        if not self.handoff_path.exists():
+            logger.warning(f"handoff.json not found at {self.handoff_path}")
+            return
+
+        if WATCHDOG_AVAILABLE:
+            self._start_watchdog()
+        else:
+            self._start_polling()
+
+    def _start_watchdog(self):
+        """Start watching using watchdog (preferred method)."""
+        try:
+            self._observer = Observer()
+            handler = HandoffFileHandler(self.handoff_path, self.callback)
+            self._observer.schedule(
+                handler,
+                str(self.handoff_path.parent),
+                recursive=False
+            )
+            self._observer.start()
+            logger.info(f"Watching handoff.json for changes (watchdog)")
+        except Exception as e:
+            logger.warning(f"Failed to start watchdog observer: {e}, falling back to polling")
+            self._start_polling()
+
+    def _start_polling(self):
+        """Start watching using polling (fallback method)."""
+        self._polling_active = True
+        self._polling_thread = threading.Thread(
+            target=self._polling_loop,
+            daemon=True
+        )
+        self._polling_thread.start()
+        logger.info(f"Watching handoff.json for changes (polling)")
+
+    def _polling_loop(self):
+        """Polling loop for file changes."""
+        while self._polling_active:
+            try:
+                if self.handoff_path.exists():
+                    with open(self.handoff_path, 'r') as f:
+                        new_content = f.read()
+
+                    if new_content != self._last_content:
+                        self._last_content = new_content
+                        data = json.loads(new_content)
+                        logger.debug(f"handoff.json modified (polling), invoking callback")
+                        self.callback(data)
+            except json.JSONDecodeError:
+                pass  # Ignore invalid JSON during writes
+            except Exception as e:
+                logger.warning(f"Error in polling loop: {e}")
+
+            # Poll every 2 seconds
+            time.sleep(2)
+
+    def stop(self):
+        """Stop watching the file."""
+        if self._observer:
+            self._observer.stop()
+            self._observer.join()
+            self._observer = None
+            logger.debug("Stopped watchdog observer")
+
+        if self._polling_thread:
+            self._polling_active = False
+            self._polling_thread.join(timeout=3)
+            self._polling_thread = None
+            logger.debug("Stopped polling thread")
 
 
 def get_current_task_id(project_dir: Path) -> Optional[str]:
@@ -88,24 +268,93 @@ def update_archon_task_status(task_id: str, status: str) -> None:
 def get_task_pass_states(project_dir: Path) -> dict[str, bool]:
     """
     Get the pass/fail state of all tasks from handoff.json.
-    
+
     Returns:
         Dict mapping task_id -> passes (True/False)
     """
     handoff_file = project_dir / "handoff.json"
     if not handoff_file.exists():
         return {}
-    
+
     try:
-        import json
         with open(handoff_file, "r") as f:
             data = json.load(f)
-        
+
         tasks = data.get("tasks", [])
         return {task.get("id"): task.get("passes", False) for task in tasks if task.get("id")}
     except Exception as e:
         logger.warning(f"Could not read handoff.json: {e}")
         return {}
+
+
+def get_task_states(project_dir: Path) -> dict[str, dict]:
+    """
+    Get the full state of all tasks from handoff.json.
+
+    Returns:
+        Dict mapping task_id -> task_dict with all task fields
+    """
+    handoff_file = project_dir / "handoff.json"
+    if not handoff_file.exists():
+        return {}
+
+    try:
+        with open(handoff_file, "r") as f:
+            data = json.load(f)
+
+        tasks = data.get("tasks", [])
+        return {task.get("id"): task for task in tasks if task.get("id")}
+    except Exception as e:
+        logger.warning(f"Could not read handoff.json: {e}")
+        return {}
+
+
+def detect_task_changes(before: dict[str, dict], after: dict[str, dict]) -> list[dict]:
+    """
+    Detect changes between two task states.
+
+    Args:
+        before: Previous task states (task_id -> task_dict)
+        after: New task states (task_id -> task_dict)
+
+    Returns:
+        List of change dicts with keys: task_id, change_type, details
+        change_type can be: 'started', 'completed', 'modified'
+    """
+    changes = []
+
+    # Check for new or modified tasks
+    for task_id, new_task in after.items():
+        old_task = before.get(task_id)
+
+        if old_task is None:
+            # New task added
+            changes.append({
+                "task_id": task_id,
+                "change_type": "started",
+                "details": "New task detected"
+            })
+        else:
+            # Check for pass status change
+            old_pass = old_task.get("passes", False)
+            new_pass = new_task.get("passes", False)
+
+            if not old_pass and new_pass:
+                # Task completed
+                changes.append({
+                    "task_id": task_id,
+                    "change_type": "completed",
+                    "details": "Task passes changed to True"
+                })
+            elif old_task != new_task:
+                # Task modified (but not completed)
+                changes.append({
+                    "task_id": task_id,
+                    "change_type": "modified",
+                    "details": "Task content changed"
+                })
+
+    return changes
 
 
 def check_newly_completed_tasks(before: dict[str, bool], after: dict[str, bool]) -> list[str]:
@@ -343,6 +592,15 @@ async def run_autonomous_agent(
 
         print_progress_summary(project_dir)
 
+    # Initialize file watcher for handoff.json (for real-time Archon updates)
+    handoff_file = project_dir / "handoff.json"
+    file_watcher = None
+    if handoff_file.exists() and not is_first_run:
+        # The file watcher callback will be set up to handle task changes
+        # For now, we create it but don't start it yet
+        # It will be started inside the agent session
+        pass
+
     # Main loop
     iteration = 0
 
@@ -383,9 +641,58 @@ async def run_autonomous_agent(
         else:
             prompt = get_prompt_for_mode(mode)
 
+        # Start file watcher before agent session (for real-time Archon updates)
+        if handoff_file.exists() and file_watcher is None:
+            # Store previous task states for comparison
+            previous_task_states = get_task_states(project_dir)
+
+            # Create a callback that will handle task changes
+            def on_handoff_changed(data: dict):
+                """Called when handoff.json changes during agent session."""
+                try:
+                    # Get new task states from the changed data
+                    new_task_states = {task.get("id"): task for task in data.get("tasks", []) if task.get("id")}
+
+                    # Detect what changed
+                    changes = detect_task_changes(previous_task_states, new_task_states)
+
+                    # Process each change and update Archon in real-time
+                    for change in changes:
+                        task_id = change["task_id"]
+                        change_type = change["change_type"]
+
+                        if change_type == "started":
+                            # Agent started working on a new task
+                            logger.info(f"Real-time: Agent started task {task_id}")
+                            update_archon_task_status(task_id, "doing")
+                        elif change_type == "completed":
+                            # Task completed (passes: false -> true)
+                            logger.info(f"Real-time: Task {task_id} completed")
+                            update_archon_task_status(task_id, "review")
+                        elif change_type == "modified":
+                            # Task content changed (description, files, etc.)
+                            logger.debug(f"Real-time: Task {task_id} modified")
+
+                    # Update previous states for next comparison
+                    previous_task_states.clear()
+                    previous_task_states.update(new_task_states)
+
+                except Exception as e:
+                    logger.warning(f"Error in handoff change callback: {e}")
+
+            file_watcher = HandoffFileWatcher(handoff_file, on_handoff_changed)
+            file_watcher.start()
+            logger.info("Real-time Archon updates enabled")
+
         # Run session with async context manager
-        async with client:
-            status, response = await run_agent_session(client, prompt, project_dir)
+        try:
+            async with client:
+                status, response = await run_agent_session(client, prompt, project_dir)
+        finally:
+            # Stop file watcher after session
+            if file_watcher:
+                file_watcher.stop()
+                file_watcher = None
 
         # Handle status
         if status == "continue":

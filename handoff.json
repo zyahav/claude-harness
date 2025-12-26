@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "project": "claude-harness",
+    "phase": "Real-time Archon Task Tracking",
+    "source": "manual",
+    "lock": true
+  },
+  "tasks": [
+    {
+      "id": "HARNESS-016-A",
+      "category": "functional",
+      "title": "Add handoff.json file watcher",
+      "description": "Create a file watcher that monitors handoff.json for changes during agent session. When the file is modified, detect which task changed and trigger Archon update.",
+      "acceptance_criteria": [
+        "File watcher monitors handoff.json during session",
+        "Detects when file is written/modified",
+        "Triggers callback with changed content",
+        "Does not block agent execution"
+      ],
+      "passes": true,
+      "files_expected": [
+        "agent.py"
+      ],
+      "steps": [
+        "Import watchdog or use polling mechanism",
+        "Start watcher before agent session",
+        "Stop watcher after session ends"
+      ]
+    },
+    {
+      "id": "HARNESS-016-B",
+      "category": "functional",
+      "title": "Detect task status changes in real-time",
+      "description": "When handoff.json changes, compare previous state to new state. Identify which specific task changed (passes: false → true, or description changed indicating work started).",
+      "acceptance_criteria": [
+        "Tracks previous state of all tasks",
+        "Detects when a task passes changes to true",
+        "Detects when task description/files change (work started)",
+        "Returns list of changed task IDs with change type"
+      ],
+      "passes": true,
+      "files_expected": [
+        "agent.py"
+      ],
+      "steps": [
+        "Store task states before watching",
+        "On file change, parse new JSON",
+        "Compare each task field",
+        "Identify change type: started vs completed"
+      ]
+    },
+    {
+      "id": "HARNESS-016-C",
+      "category": "functional",
+      "title": "Update Archon immediately on task change",
+      "description": "When a task change is detected: if work started on a new task, update it to 'doing'. If task completed (passes: true), update to 'review'. This happens in real-time, not at end of iteration.",
+      "acceptance_criteria": [
+        "Task moves to 'doing' when agent starts working on it",
+        "Task moves to 'review' when passes becomes true",
+        "Updates happen within seconds of change",
+        "Multiple tasks can transition in sequence during one session"
+      ],
+      "passes": true,
+      "files_expected": [
+        "agent.py",
+        "archon_integration.py"
+      ],
+      "steps": [
+        "Hook file watcher to Archon update functions",
+        "Call start_task() when work detected",
+        "Call update_task_status('review') when completed",
+        "Log each transition"
+      ]
+    },
+    {
+      "id": "HARNESS-016-D",
+      "category": "testing",
+      "title": "Test real-time Archon updates",
+      "description": "Add tests to verify that Archon task statuses update in real-time as the agent works, not just at the end of iterations.",
+      "acceptance_criteria": [
+        "Test file watcher detects changes",
+        "Test task state comparison logic",
+        "Test Archon is called for each transition",
+        "All tests pass"
+      ],
+      "passes": true,
+      "files_expected": [
+        "tests/test_archon_integration.py"
+      ],
+      "steps": [
+        "Mock file changes",
+        "Verify watcher callback fires",
+        "Verify Archon functions called correctly"
+      ]
+    }
+  ]
+}

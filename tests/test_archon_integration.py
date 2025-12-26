@@ -158,8 +158,124 @@ class TestArchonIntegration(unittest.TestCase):
         
         sig = inspect.signature(run_autonomous_agent)
         params = list(sig.parameters.keys())
-        
+
         self.assertIn("no_archon", params, "run_autonomous_agent should accept no_archon parameter")
+
+    def test_file_watcher_class_exists(self):
+        """Verify HandoffFileWatcher class exists in agent module."""
+        from agent import HandoffFileWatcher
+        self.assertTrue(callable(HandoffFileWatcher))
+
+    def test_get_task_states_returns_full_task_dicts(self):
+        """Verify get_task_states returns full task dictionaries."""
+        from agent import get_task_states
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            handoff = project_dir / "handoff.json"
+
+            # Create handoff with tasks
+            handoff.write_text(json.dumps({
+                "tasks": [
+                    {
+                        "id": "TASK-1",
+                        "title": "First Task",
+                        "passes": True,
+                        "category": "functional"
+                    },
+                    {
+                        "id": "TASK-2",
+                        "title": "Second Task",
+                        "passes": False,
+                        "category": "testing"
+                    },
+                ]
+            }))
+
+            result = get_task_states(project_dir)
+
+            self.assertEqual(len(result), 2)
+            self.assertIn("TASK-1", result)
+            self.assertIn("TASK-2", result)
+            # Verify full task data is present
+            self.assertEqual(result["TASK-1"]["title"], "First Task")
+            self.assertEqual(result["TASK-2"]["category"], "testing")
+
+    def test_detect_task_changes_identifies_completed_tasks(self):
+        """Verify detect_task_changes detects completed tasks."""
+        from agent import detect_task_changes
+
+        before = {
+            "T1": {"id": "T1", "passes": False, "title": "Task 1"},
+            "T2": {"id": "T2", "passes": False, "title": "Task 2"},
+        }
+        after = {
+            "T1": {"id": "T1", "passes": True, "title": "Task 1"},
+            "T2": {"id": "T2", "passes": False, "title": "Task 2"},
+        }
+
+        changes = detect_task_changes(before, after)
+
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["task_id"], "T1")
+        self.assertEqual(changes[0]["change_type"], "completed")
+
+    def test_detect_task_changes_identifies_new_tasks(self):
+        """Verify detect_task_changes detects new tasks."""
+        from agent import detect_task_changes
+
+        before = {
+            "T1": {"id": "T1", "passes": False},
+        }
+        after = {
+            "T1": {"id": "T1", "passes": False},
+            "T2": {"id": "T2", "passes": False},  # New task
+        }
+
+        changes = detect_task_changes(before, after)
+
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["task_id"], "T2")
+        self.assertEqual(changes[0]["change_type"], "started")
+
+    def test_detect_task_changes_identifies_modified_tasks(self):
+        """Verify detect_task_changes detects task modifications."""
+        from agent import detect_task_changes
+
+        before = {
+            "T1": {"id": "T1", "passes": False, "title": "Old Title"},
+        }
+        after = {
+            "T1": {"id": "T1", "passes": False, "title": "New Title"},  # Modified
+        }
+
+        changes = detect_task_changes(before, after)
+
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["task_id"], "T1")
+        self.assertEqual(changes[0]["change_type"], "modified")
+
+    def test_detect_task_changes_handles_multiple_changes(self):
+        """Verify detect_task_changes detects multiple changes at once."""
+        from agent import detect_task_changes
+
+        before = {
+            "T1": {"id": "T1", "passes": False},
+            "T2": {"id": "T2", "passes": False},
+            "T3": {"id": "T3", "passes": False},
+        }
+        after = {
+            "T1": {"id": "T1", "passes": True},  # Completed
+            "T2": {"id": "T2", "passes": False},
+            "T3": {"id": "T3", "passes": False, "title": "Updated"},  # Modified
+            "T4": {"id": "T4", "passes": False},  # New
+        }
+
+        changes = detect_task_changes(before, after)
+
+        self.assertEqual(len(changes), 3)
+        change_types = {c["change_type"] for c in changes}
+        self.assertEqual(change_types, {"completed", "modified", "started"})
 
 
 if __name__ == "__main__":
