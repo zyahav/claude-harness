@@ -7,6 +7,7 @@ Core agent interaction functions for running autonomous coding sessions.
 
 import asyncio
 import json
+import logging
 import threading
 import time
 from pathlib import Path
@@ -20,7 +21,7 @@ from prompts import get_initializer_prompt, get_prompt_for_mode, copy_spec_to_pr
 import schema
 import archon_integration
 
-import logging
+logger = logging.getLogger(__name__)
 
 # Try to import watchdog for file watching
 try:
@@ -30,8 +31,6 @@ try:
 except ImportError:
     WATCHDOG_AVAILABLE = False
     logger.warning("watchdog not available - file watching disabled")
-
-logger = logging.getLogger(__name__)
 
 # Global Archon reference for current session
 _archon_project: Optional[archon_integration.ArchonProject] = None
