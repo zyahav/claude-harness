@@ -85,6 +85,47 @@ def update_archon_task_status(task_id: str, status: str) -> None:
         logger.warning(f"Failed to update Archon task status: {e}")
 
 
+def get_task_pass_states(project_dir: Path) -> dict[str, bool]:
+    """
+    Get the pass/fail state of all tasks from handoff.json.
+    
+    Returns:
+        Dict mapping task_id -> passes (True/False)
+    """
+    handoff_file = project_dir / "handoff.json"
+    if not handoff_file.exists():
+        return {}
+    
+    try:
+        import json
+        with open(handoff_file, "r") as f:
+            data = json.load(f)
+        
+        tasks = data.get("tasks", [])
+        return {task.get("id"): task.get("passes", False) for task in tasks if task.get("id")}
+    except Exception as e:
+        logger.warning(f"Could not read handoff.json: {e}")
+        return {}
+
+
+def check_newly_completed_tasks(before: dict[str, bool], after: dict[str, bool]) -> list[str]:
+    """
+    Find tasks that changed from passes=False to passes=True.
+    
+    Args:
+        before: Task states before iteration
+        after: Task states after iteration
+    
+    Returns:
+        List of task IDs that were newly completed
+    """
+    newly_completed = []
+    for task_id, passes in after.items():
+        if passes and not before.get(task_id, False):
+            newly_completed.append(task_id)
+    return newly_completed
+
+
 async def run_agent_session(
     client: "ClaudeSDKClient",
     message: str,
@@ -279,6 +320,9 @@ async def run_autonomous_agent(
             if current_task:
                 update_archon_task_status(current_task, "doing")
 
+        # Capture task states before session (for detecting completions)
+        tasks_before = get_task_pass_states(project_dir)
+
         # Create client (fresh context)
         client = create_client(project_dir, model)
 
@@ -298,6 +342,12 @@ async def run_autonomous_agent(
             # Success! Reset backoff
             consecutive_errors = 0
             backoff_seconds = 1
+            
+            # Check for newly completed tasks and update Archon
+            tasks_after = get_task_pass_states(project_dir)
+            newly_completed = check_newly_completed_tasks(tasks_before, tasks_after)
+            for task_id in newly_completed:
+                update_archon_task_status(task_id, "review")
             
             logger.info(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
             print_progress_summary(project_dir)
