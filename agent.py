@@ -126,6 +126,50 @@ def check_newly_completed_tasks(before: dict[str, bool], after: dict[str, bool])
     return newly_completed
 
 
+def log_session_summary(project_dir: Path, iteration: int, newly_completed: list[str]) -> None:
+    """
+    Log a session summary to Archon for the current task.
+    
+    Args:
+        project_dir: Project directory with handoff.json
+        iteration: Current iteration number
+        newly_completed: List of task IDs completed this iteration
+    """
+    global _archon_project
+    
+    if not _archon_project:
+        return
+    
+    # Get current task to log summary to
+    current_task = get_current_task_id(project_dir)
+    if not current_task:
+        # All tasks done, log to last completed task if any
+        if newly_completed:
+            current_task = newly_completed[-1]
+        else:
+            return
+    
+    archon_task_id = _archon_project.task_ids.get(current_task)
+    if not archon_task_id:
+        return
+    
+    # Build summary message
+    from progress import count_passing_tests
+    passing, total = count_passing_tests(project_dir)
+    
+    summary_parts = [f"Iteration {iteration} complete"]
+    if newly_completed:
+        summary_parts.append(f"completed: {', '.join(newly_completed)}")
+    summary_parts.append(f"progress: {passing}/{total}")
+    
+    summary = " | ".join(summary_parts)
+    
+    try:
+        archon_integration.log_progress(archon_task_id, summary)
+    except Exception as e:
+        logger.warning(f"Failed to log session summary: {e}")
+
+
 async def run_agent_session(
     client: "ClaudeSDKClient",
     message: str,
@@ -348,6 +392,9 @@ async def run_autonomous_agent(
             newly_completed = check_newly_completed_tasks(tasks_before, tasks_after)
             for task_id in newly_completed:
                 update_archon_task_status(task_id, "review")
+            
+            # Log session summary to Archon
+            log_session_summary(project_dir, iteration, newly_completed)
             
             logger.info(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
             print_progress_summary(project_dir)
