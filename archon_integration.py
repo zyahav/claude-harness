@@ -329,3 +329,114 @@ def load_archon_reference(run_dir: Path) -> Optional[ArchonProject]:
     except Exception as e:
         logger.error(f"Failed to load Archon reference: {e}")
         return None
+
+
+
+# =============================================================================
+# Progress Logging Functions
+# =============================================================================
+
+from datetime import datetime
+
+
+def get_task_description(task_id: str) -> Optional[str]:
+    """Get current task description from Archon."""
+    result = call_archon_tool("find_tasks", {"task_id": task_id})
+    if result.get("success") and result.get("task"):
+        return result["task"].get("description", "")
+    return None
+
+
+def update_task_description(task_id: str, description: str) -> bool:
+    """Update task description in Archon."""
+    result = call_archon_tool("manage_task", {
+        "action": "update",
+        "task_id": task_id,
+        "description": description,
+    })
+    return result.get("success", False)
+
+
+def update_task_status(task_id: str, status: str) -> bool:
+    """
+    Update task status in Archon.
+    
+    Args:
+        task_id: Archon task ID
+        status: One of 'todo', 'doing', 'review', 'done'
+    
+    Returns:
+        True if successful
+    """
+    if status not in ("todo", "doing", "review", "done"):
+        logger.error(f"Invalid status: {status}")
+        return False
+    
+    result = call_archon_tool("manage_task", {
+        "action": "update",
+        "task_id": task_id,
+        "status": status,
+    })
+    success = result.get("success", False)
+    if success:
+        logger.info(f"Task {task_id} status -> {status}")
+    return success
+
+
+def log_progress(task_id: str, message: str, status: Optional[str] = None) -> bool:
+    """
+    Log progress to an Archon task by appending to its description.
+    
+    Args:
+        task_id: Archon task ID
+        message: Progress message to append
+        status: Optional status update ('todo', 'doing', 'review', 'done')
+    
+    Returns:
+        True if successful
+    
+    Example:
+        log_progress("abc-123", "Reading codebase...", status="doing")
+        log_progress("abc-123", "Implementing feature...")
+        log_progress("abc-123", "✓ Complete - ready for review", status="review")
+    """
+    # Get current description
+    current_desc = get_task_description(task_id)
+    if current_desc is None:
+        logger.error(f"Could not get description for task {task_id}")
+        return False
+    
+    # Format timestamp
+    timestamp = datetime.now().strftime("%H:%M")
+    entry = f"[{timestamp}] {message}"
+    
+    # Check if progress section exists
+    progress_marker = "\n\n---\n## Progress Log\n"
+    if progress_marker in current_desc:
+        # Append to existing progress section
+        new_desc = current_desc + entry + "\n"
+    else:
+        # Create progress section
+        new_desc = current_desc + progress_marker + entry + "\n"
+    
+    # Update description
+    if not update_task_description(task_id, new_desc):
+        logger.error(f"Failed to update description for task {task_id}")
+        return False
+    
+    # Update status if provided
+    if status:
+        update_task_status(task_id, status)
+    
+    logger.info(f"Logged progress to task {task_id}: {message}")
+    return True
+
+
+def start_task(task_id: str, message: str = "Task started") -> bool:
+    """Mark task as doing and log start."""
+    return log_progress(task_id, message, status="doing")
+
+
+def complete_task(task_id: str, message: str = "✓ Task complete") -> bool:
+    """Mark task as review and log completion."""
+    return log_progress(task_id, message, status="review")
