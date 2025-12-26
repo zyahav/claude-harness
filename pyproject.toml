@@ -23,4 +23,4 @@ dependencies = [
 c-harness = "harness:main"
 
 [tool.setuptools]
-py-modules = ["harness", "agent", "archon_integration", "client", "doc_check", "lifecycle", "progress", "prompts", "schema", "security"]
+py-modules = ["harness", "agent", "archon_integration", "client", "doc_check", "lifecycle", "progress", "prompts", "schema", "security", "state", "locking", "reconcile", "cockpit", "rules", "events"]

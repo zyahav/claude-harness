@@ -83,5 +83,25 @@ class TestCLI(unittest.TestCase):
             main()
             mock_session.assert_called_once()
 
+    @patch('harness.handle_next')
+    def test_next_command_dispatch(self, mock_next):
+        """Verify 'next' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'next']):
+            main()
+            mock_next.assert_called_once()
+
+    def test_next_command_runs(self):
+        """Test that next command runs without error."""
+        result = subprocess.run(
+            [sys.executable, "harness.py", "next"],
+            capture_output=True,
+            text=True
+        )
+        self.assertEqual(result.returncode, 0)
+        # Should contain key output elements
+        self.assertIn("NEXT ACTION", result.stdout)
+        self.assertIn("Why:", result.stdout)
+        self.assertIn("Done:", result.stdout)
+
 if __name__ == "__main__":
     unittest.main()

@@ -44,6 +44,7 @@ import state
 import locking
 import reconcile
 import cockpit
+import rules
 
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
@@ -743,6 +744,41 @@ def handle_doctor(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def handle_next(args: argparse.Namespace) -> None:
+    """Compute and display the next action using rule engine.
+
+    Outputs the next action with 'Why' and 'Done' criteria.
+    Read-only command (acquires no lock, runs reconcile with cache).
+    """
+    try:
+        # Load state
+        state_mgr = state.StateManager()
+        current_state = state_mgr.load_state()
+
+        # Run reconcile with caching
+        reconciler = reconcile.Reconciler(state_mgr, current_state)
+        reconciler.run_reconcile(use_cache=True)
+
+        # Reload state after reconcile
+        current_state = state_mgr.load_state()
+
+        # Compute next action using rule engine
+        next_info = rules.compute_next_action(current_state, state_mgr)
+
+        # Display next action
+        print("\n" + "=" * 60)
+        print("  NEXT ACTION")
+        print("=" * 60)
+        print(f"\n  → {next_info['action']}")
+        print(f"\n  Why: {next_info['why']}")
+        print(f"  Done: {next_info['done']}")
+        print("=" * 60)
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def handle_session(args: argparse.Namespace) -> None:
     """Start an interactive Harness Commander session.
 
@@ -969,6 +1005,10 @@ def main() -> None:
     doctor_parser.add_argument("--repair-state", action="store_true",
                               help="Run reconciliation and fix safe issues automatically")
     doctor_parser.set_defaults(func=handle_doctor, repair_state=False)
+
+    # NEXT command (Harness Commander)
+    next_parser = subparsers.add_parser("next", help="Show next recommended action")
+    next_parser.set_defaults(func=handle_next)
 
     # SESSION command (Harness Commander)
     session_parser = subparsers.add_parser("session", help="Start interactive Harness Commander session")

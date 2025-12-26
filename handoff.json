@@ -205,7 +205,7 @@
         "Rule engine: clean → tests → finish → focus → start → tasks",
         "Integration tests for next action logic"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["harness.py", "rules.py", "tests/test_rules.py"],
       "steps": [
         "Create rules.py with compute_next_action() function",
