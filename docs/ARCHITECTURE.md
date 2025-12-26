@@ -16,42 +16,68 @@ The system has recently transitioned from a prototype script to a modular, type-
 The codebase is organized into modular components to ensure separation of concerns:
 
 -   **`harness.py`**: A thin CLI wrapper using `argparse` for subcommand dispatch (`start`, `run`, `list`, `clean`, `finish`).
+
+### Layer A: The Engine (Existing)
+*Core components providing the Git worktree lifecycle.*
+
 -   **`lifecycle.py`**: Encapsulates all Git worktree operations, ensuring isolation between agent runs and the main repo.
 -   **`schema.py`**: Defines the canonical data model (`Handoff`, `Task`) with built-in validation methods.
 -   **`agent.py`**: Orchestrates the agent loop, decoupling high-level logic from the SDK implementation.
 -   **`client.py`**: Centralized configuration for the Claude SDK, enforcing security policies and environment management.
 
-### Key Design Decisions
+#### Key Design Decisions (Engine)
 -   **Git Worktrees for Isolation**: Each agent run operates in its own folder (`runs/<run-name>`) backed by a dedicated branch (`run/<run-name>`). This prevents "dirty working directory" issues and allows parallel runs.
--   **Lazy Imports**: Heavy dependencies (like `claude-code-sdk`) are lazy-loaded. This ensures the CLI remains snappy (e.g., for `--help` or `list`) even if the SDK is not installed or configured (see `docs/ADR-001-lazy-imports.md`).
+-   **Lazy Imports**: Heavy dependencies (like `claude-code-sdk`) are lazy-loaded. This ensures the CLI remains snappy.
+
+### Layer B: Harness Commander (New)
+*The ADHD-First Control Plane.*
+
+**Status:** Phase 1 MVP Construction
+
+To solve "state chaos" and "ADHD execution drift", we are adding a **Commander Layer** on top of the Engine.
+
+*   **Role**: The "Steering Wheel". It provides a deterministic, single-controller interface for managing the agent's focus.
+*   **Key Concepts**:
+    *   **Controller vs Observer**: Only one process can mutate state at a time (guarded by a lock file).
+    *   **Reconcile Reality**: The system trust's `git` over its own internal database. If the user changes branches, the Commander adapts.
+    *   **Loop Closure**: The system nudges the user to finish runs and clean up worktrees.
 
 ---
 
 ## 3. Current System State
 
-### Capabilities
+### Capabilities (Engine v2.0)
 -   **Robust Lifecycle**: Agents can be started, stopped, resumed, and cleaned up via simple CLI commands.
--   **Schema Validation**: The system strictly validates `handoff.json` on startup. Corrupted files are rejected to prevent "zombie" runs.
--   **Type Safety**: The codebase is fully typed and uses `dataclasses` for data contracts.
+-   **Schema Validation**: The system strictly validates `handoff.json` on startup.
+-   **Type Safety**: The codebase is fully typed and uses `dataclasses`.
 
-### Technical Audit (v2.0)
--   **Memory Persistence**: File-based via `handoff.json` in the project worktree.
--   **Context Window**: Managed by `claude-code-sdk` (defaults to 100k tokens).
+### Technical Audit
+-   **Memory Persistence**: File-based via `handoff.json`.
 -   **Tooling**: Implicitly defined via the SDK (`"Read"`, `"Bash"`).
 
 ---
 
 ## 4. Future Roadmap & Multi-Provider Strategy
 
-*Note: This section outlines the planned transition to a "Universal Intelligence Console" supporting models beyond Claude.*
+*Note: The "Universal Intelligence Console" vision has evolved into "Harness Commander".*
 
-**Feasibility Verdict:** **GO**
-The structure (worktrees + independent task tracking) is provider-agnostic. The transition is feasible but requires refactoring `client.py` and `agent.py`.
+### Phase 1: Harness Commander MVP (Current Focus)
+Goal: **Trust > Intelligence.**
+-   Implement `c-harness session` (Cockpit).
+-   Implement `c-harness next` (Single Instruction).
+-   Implement `c-harness inbox` (Fire-and-forget capture).
+-   **No Convex yet** (Local filesystem state only).
 
-### Proposed Phases
-1.  **Phase 1: Provider Factory**: Create an `LLMProvider` protocol to abstract away the specific SDK. Implement `AnthropicProvider` and `OpenAIProvider`.
-2.  **Phase 2: Schema Evolution**: Update `schema.py` to allow tasks to specify their preferred model/provider in `handoff.json`.
-3.  **Phase 3: The Orchestrator**: Modify `harness.py` to instantiate the correct provider for each task dynamically.
+### Phase 2: Distributed State
+Goal: **Multi-Device / Team Synchronization.**
+-   Introduce Convex backend.
+-   Kanban UI.
+-   Shared leases.
+
+### Phase 3: Multi-Provider Support
+Goal: **Agnt-Agnostic.**
+-   Refactoring `agent.py` to support OpenAI/Gemini via a Provider Protocol.
+
 
 ---
 
