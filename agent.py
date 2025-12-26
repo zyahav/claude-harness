@@ -251,6 +251,7 @@ async def run_autonomous_agent(
     spec_path: Optional[Path] = None,
     mode: str = "greenfield",
     handoff_path: Optional[Path] = None,
+    no_archon: bool = False,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -262,17 +263,22 @@ async def run_autonomous_agent(
         spec_path: Path to the constitution/spec file (None for default)
         mode: 'greenfield' (new project) or 'brownfield' (existing codebase)
         handoff_path: Path to handoff.json for brownfield mode (None for default: <worktree>/handoff.json)
+        no_archon: If True, disable all Archon integration updates
     """
     global _archon_project
     
     # Load Archon reference if available (graceful fallback if not)
-    _archon_project = archon_integration.load_archon_reference(project_dir)
-    if _archon_project:
-        logger.info(f"Archon integration active: {_archon_project.title}")
-        logger.info(f"  Project ID: {_archon_project.project_id}")
-        logger.info(f"  Task mappings: {len(_archon_project.task_ids)}")
+    if no_archon:
+        logger.info("Archon integration disabled (--no-archon flag)")
+        _archon_project = None
     else:
-        logger.debug("No Archon integration (no .run.json or no archon section)")
+        _archon_project = archon_integration.load_archon_reference(project_dir)
+        if _archon_project:
+            logger.info(f"Archon integration active: {_archon_project.title}")
+            logger.info(f"  Project ID: {_archon_project.project_id}")
+            logger.info(f"  Task mappings: {len(_archon_project.task_ids)}")
+        else:
+            logger.debug("No Archon integration (no .run.json or no archon section)")
     
     mode_label = "GREENFIELD" if mode == "greenfield" else "BROWNFIELD"
     logger.info("\n" + "=" * 70)
