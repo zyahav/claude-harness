@@ -201,6 +201,7 @@ def handle_run(args: argparse.Namespace) -> None:
                 spec_path=args.spec,
                 mode=args.mode,
                 handoff_path=args.handoff_path,
+                no_archon=args.no_archon,
             )
         )
     except FileNotFoundError:
@@ -341,6 +342,7 @@ def main() -> None:
     run_parser.add_argument("--handoff-path", type=Path, default=None,
                            help="Path to handoff.json for brownfield mode (default: <worktree>/handoff.json)")
     run_parser.add_argument("--repo-path", default=".", help="Path to the target repository (for context)")
+    run_parser.add_argument("--no-archon", action="store_true", help="Disable Archon integration (skip all Archon updates)")
     run_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     run_parser.set_defaults(func=handle_run)
 

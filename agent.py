@@ -15,13 +15,159 @@ from client import create_client
 from progress import print_session_header, print_progress_summary
 from prompts import get_initializer_prompt, get_prompt_for_mode, copy_spec_to_project
 import schema
+import archon_integration
 
 import logging
 
 logger = logging.getLogger(__name__)
 
+# Global Archon reference for current session
+_archon_project: Optional[archon_integration.ArchonProject] = None
+
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
+
+
+def get_current_task_id(project_dir: Path) -> Optional[str]:
+    """
+    Get the ID of the first incomplete task from handoff.json.
+    
+    Returns:
+        Task ID string (e.g., "HARNESS-014-A") or None if no incomplete tasks
+    """
+    handoff_file = project_dir / "handoff.json"
+    if not handoff_file.exists():
+        return None
+    
+    try:
+        import json
+        with open(handoff_file, "r") as f:
+            data = json.load(f)
+        
+        tasks = data.get("tasks", [])
+        for task in tasks:
+            if not task.get("passes", False):
+                return task.get("id")
+        return None  # All tasks complete
+    except Exception as e:
+        logger.warning(f"Could not read handoff.json: {e}")
+        return None
+
+
+def update_archon_task_status(task_id: str, status: str) -> None:
+    """
+    Update the Archon task status if Archon integration is active.
+    
+    Args:
+        task_id: The handoff.json task ID (e.g., "HARNESS-014-A")
+        status: New status ("doing", "review", etc.)
+    """
+    global _archon_project
+    
+    if not _archon_project:
+        return
+    
+    # Map handoff task ID to Archon task ID
+    archon_task_id = _archon_project.task_ids.get(task_id)
+    if not archon_task_id:
+        logger.debug(f"No Archon mapping for task {task_id}")
+        return
+    
+    try:
+        if status == "doing":
+            archon_integration.start_task(archon_task_id, f"Agent started working on {task_id}")
+        elif status == "review":
+            archon_integration.complete_task(archon_task_id, f"✓ {task_id} complete")
+        else:
+            archon_integration.update_task_status(archon_task_id, status)
+        logger.info(f"Archon: {task_id} → {status}")
+    except Exception as e:
+        logger.warning(f"Failed to update Archon task status: {e}")
+
+
+def get_task_pass_states(project_dir: Path) -> dict[str, bool]:
+    """
+    Get the pass/fail state of all tasks from handoff.json.
+    
+    Returns:
+        Dict mapping task_id -> passes (True/False)
+    """
+    handoff_file = project_dir / "handoff.json"
+    if not handoff_file.exists():
+        return {}
+    
+    try:
+        import json
+        with open(handoff_file, "r") as f:
+            data = json.load(f)
+        
+        tasks = data.get("tasks", [])
+        return {task.get("id"): task.get("passes", False) for task in tasks if task.get("id")}
+    except Exception as e:
+        logger.warning(f"Could not read handoff.json: {e}")
+        return {}
+
+
+def check_newly_completed_tasks(before: dict[str, bool], after: dict[str, bool]) -> list[str]:
+    """
+    Find tasks that changed from passes=False to passes=True.
+    
+    Args:
+        before: Task states before iteration
+        after: Task states after iteration
+    
+    Returns:
+        List of task IDs that were newly completed
+    """
+    newly_completed = []
+    for task_id, passes in after.items():
+        if passes and not before.get(task_id, False):
+            newly_completed.append(task_id)
+    return newly_completed
+
+
+def log_session_summary(project_dir: Path, iteration: int, newly_completed: list[str]) -> None:
+    """
+    Log a session summary to Archon for the current task.
+    
+    Args:
+        project_dir: Project directory with handoff.json
+        iteration: Current iteration number
+        newly_completed: List of task IDs completed this iteration
+    """
+    global _archon_project
+    
+    if not _archon_project:
+        return
+    
+    # Get current task to log summary to
+    current_task = get_current_task_id(project_dir)
+    if not current_task:
+        # All tasks done, log to last completed task if any
+        if newly_completed:
+            current_task = newly_completed[-1]
+        else:
+            return
+    
+    archon_task_id = _archon_project.task_ids.get(current_task)
+    if not archon_task_id:
+        return
+    
+    # Build summary message
+    from progress import count_passing_tests
+    passing, total = count_passing_tests(project_dir)
+    
+    summary_parts = [f"Iteration {iteration} complete"]
+    if newly_completed:
+        summary_parts.append(f"completed: {', '.join(newly_completed)}")
+    summary_parts.append(f"progress: {passing}/{total}")
+    
+    summary = " | ".join(summary_parts)
+    
+    try:
+        archon_integration.log_progress(archon_task_id, summary)
+    except Exception as e:
+        logger.warning(f"Failed to log session summary: {e}")
 
 
 async def run_agent_session(
@@ -105,6 +251,7 @@ async def run_autonomous_agent(
     spec_path: Optional[Path] = None,
     mode: str = "greenfield",
     handoff_path: Optional[Path] = None,
+    no_archon: bool = False,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -116,7 +263,23 @@ async def run_autonomous_agent(
         spec_path: Path to the constitution/spec file (None for default)
         mode: 'greenfield' (new project) or 'brownfield' (existing codebase)
         handoff_path: Path to handoff.json for brownfield mode (None for default: <worktree>/handoff.json)
+        no_archon: If True, disable all Archon integration updates
     """
+    global _archon_project
+    
+    # Load Archon reference if available (graceful fallback if not)
+    if no_archon:
+        logger.info("Archon integration disabled (--no-archon flag)")
+        _archon_project = None
+    else:
+        _archon_project = archon_integration.load_archon_reference(project_dir)
+        if _archon_project:
+            logger.info(f"Archon integration active: {_archon_project.title}")
+            logger.info(f"  Project ID: {_archon_project.project_id}")
+            logger.info(f"  Task mappings: {len(_archon_project.task_ids)}")
+        else:
+            logger.debug("No Archon integration (no .run.json or no archon section)")
+    
     mode_label = "GREENFIELD" if mode == "greenfield" else "BROWNFIELD"
     logger.info("\n" + "=" * 70)
     logger.info(f"  AUTONOMOUS CODING AGENT ({mode_label})")
@@ -201,6 +364,15 @@ async def run_autonomous_agent(
         # TODO: Update progress.py to use logging or capture its output
         print_session_header(iteration, is_first_run)
 
+        # Update Archon with current task status (if not initializer run)
+        if not is_first_run:
+            current_task = get_current_task_id(project_dir)
+            if current_task:
+                update_archon_task_status(current_task, "doing")
+
+        # Capture task states before session (for detecting completions)
+        tasks_before = get_task_pass_states(project_dir)
+
         # Create client (fresh context)
         client = create_client(project_dir, model)
 
@@ -220,6 +392,15 @@ async def run_autonomous_agent(
             # Success! Reset backoff
             consecutive_errors = 0
             backoff_seconds = 1
+            
+            # Check for newly completed tasks and update Archon
+            tasks_after = get_task_pass_states(project_dir)
+            newly_completed = check_newly_completed_tasks(tasks_before, tasks_after)
+            for task_id in newly_completed:
+                update_archon_task_status(task_id, "review")
+            
+            # Log session summary to Archon
+            log_session_summary(project_dir, iteration, newly_completed)
             
             logger.info(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
             print_progress_summary(project_dir)
