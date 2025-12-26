@@ -28,6 +28,63 @@ _archon_project: Optional[archon_integration.ArchonProject] = None
 AUTO_CONTINUE_DELAY_SECONDS = 3
 
 
+def get_current_task_id(project_dir: Path) -> Optional[str]:
+    """
+    Get the ID of the first incomplete task from handoff.json.
+    
+    Returns:
+        Task ID string (e.g., "HARNESS-014-A") or None if no incomplete tasks
+    """
+    handoff_file = project_dir / "handoff.json"
+    if not handoff_file.exists():
+        return None
+    
+    try:
+        import json
+        with open(handoff_file, "r") as f:
+            data = json.load(f)
+        
+        tasks = data.get("tasks", [])
+        for task in tasks:
+            if not task.get("passes", False):
+                return task.get("id")
+        return None  # All tasks complete
+    except Exception as e:
+        logger.warning(f"Could not read handoff.json: {e}")
+        return None
+
+
+def update_archon_task_status(task_id: str, status: str) -> None:
+    """
+    Update the Archon task status if Archon integration is active.
+    
+    Args:
+        task_id: The handoff.json task ID (e.g., "HARNESS-014-A")
+        status: New status ("doing", "review", etc.)
+    """
+    global _archon_project
+    
+    if not _archon_project:
+        return
+    
+    # Map handoff task ID to Archon task ID
+    archon_task_id = _archon_project.task_ids.get(task_id)
+    if not archon_task_id:
+        logger.debug(f"No Archon mapping for task {task_id}")
+        return
+    
+    try:
+        if status == "doing":
+            archon_integration.start_task(archon_task_id, f"Agent started working on {task_id}")
+        elif status == "review":
+            archon_integration.complete_task(archon_task_id, f"✓ {task_id} complete")
+        else:
+            archon_integration.update_task_status(archon_task_id, status)
+        logger.info(f"Archon: {task_id} → {status}")
+    except Exception as e:
+        logger.warning(f"Failed to update Archon task status: {e}")
+
+
 async def run_agent_session(
     client: "ClaudeSDKClient",
     message: str,
@@ -215,6 +272,12 @@ async def run_autonomous_agent(
         # Print session header
         # TODO: Update progress.py to use logging or capture its output
         print_session_header(iteration, is_first_run)
+
+        # Update Archon with current task status (if not initializer run)
+        if not is_first_run:
+            current_task = get_current_task_id(project_dir)
+            if current_task:
+                update_archon_task_status(current_task, "doing")
 
         # Create client (fresh context)
         client = create_client(project_dir, model)
