@@ -14,11 +14,13 @@ authors = [
 ]
 dependencies = [
   "python-dotenv",
-  "claude-code-sdk"  # Assuming this is the SDK name based on imports
+  "claude-code-sdk",
+  "httpx",
+  "requests",
 ]
 
 [project.scripts]
 c-harness = "harness:main"
 
 [tool.setuptools]
-py-modules = ["harness", "agent", "client", "lifecycle", "progress", "prompts", "schema", "security"]
+py-modules = ["harness", "agent", "archon_integration", "client", "lifecycle", "progress", "prompts", "schema", "security"]
