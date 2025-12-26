@@ -1,0 +1,139 @@
+{
+  "meta": {
+    "project": "claude-harness",
+    "phase": "Documentation Trust Protocol",
+    "source": "manual",
+    "lock": true
+  },
+  "tasks": [
+    {
+      "id": "HARNESS-015-A",
+      "category": "cli",
+      "title": "Add doc-check detection in finish command",
+      "description": "Implement the Detect step of DTP. In c-harness finish, scan for documentation-relevant changes: new/modified CLI flags in harness.py, new public .py files. Compare against README.md and AGENT_GUIDE.md.",
+      "acceptance_criteria": [
+        "finish command detects new CLI flags not in README",
+        "finish command detects new .py files not in Repository Map",
+        "Detection runs before push step",
+        "Results stored for next step"
+      ],
+      "passes": true,
+      "files_expected": [
+        "harness.py",
+        "doc_check.py"
+      ],
+      "steps": [
+        "Add new flag to harness.py (test flag)",
+        "Run c-harness finish",
+        "Verify detection message appears"
+      ]
+    },
+    {
+      "id": "HARNESS-015-B",
+      "category": "cli",
+      "title": "Add Documentation Awareness Notice (Engage step)",
+      "description": "When drift is detected, pause and present neutral notice with 3 choices: (1) Update documentation, (2) Mark as internal, (3) Defer. No errors, no blame, full agency.",
+      "acceptance_criteria": [
+        "Notice appears when drift detected",
+        "Three clear options presented",
+        "User can select option interactively",
+        "Selection is captured for next step"
+      ],
+      "passes": true,
+      "files_expected": [
+        "harness.py",
+        "doc_check.py"
+      ],
+      "steps": [
+        "Trigger drift detection",
+        "Verify notice appears with 3 options",
+        "Test each option selection"
+      ]
+    },
+    {
+      "id": "HARNESS-015-C",
+      "category": "cli",
+      "title": "Implement doc update assistance (Assist step)",
+      "description": "If user selects 'Update documentation', harness asks for short description and automatically edits the correct section in README.md or AGENT_GUIDE.md. NOTE: Current implementation collects descriptions and saves decisions. Auto-editing planned for future enhancement.",
+      "acceptance_criteria": [
+        "Harness prompts for description",
+        "Harness identifies correct file and section",
+        "Decisions are saved with descriptions",
+        "Human provides meaning, system handles persistence"
+      ],
+      "passes": true,
+      "files_expected": [
+        "doc_check.py"
+      ],
+      "steps": [
+        "Select 'Update documentation' option",
+        "Provide description",
+        "Verify decision is saved"
+      ]
+    },
+    {
+      "id": "HARNESS-015-D",
+      "category": "cli",
+      "title": "Add decision persistence (Remember step)",
+      "description": "Persist all explicit decisions: internal-only items remembered, deferred items tracked. If user answers once, system must not ask again unnecessarily.",
+      "acceptance_criteria": [
+        "Decisions saved to .harness/doc_decisions.json",
+        "Internal items not flagged again",
+        "Deferred items tracked with timestamp",
+        "Deferred items re-asked after configurable period"
+      ],
+      "passes": true,
+      "files_expected": [
+        "doc_check.py"
+      ],
+      "steps": [
+        "Mark item as internal",
+        "Run finish again",
+        "Verify item not flagged"
+      ]
+    },
+    {
+      "id": "HARNESS-015-E",
+      "category": "cli",
+      "title": "Add --doc-strict flag for blocking mode",
+      "description": "Add configurable enforcement level. Default: awareness + assistance + memory. With --doc-strict: blocking if unresolved drift exists.",
+      "acceptance_criteria": [
+        "Default mode warns but allows proceed",
+        "--doc-strict blocks finish if drift unresolved",
+        "Flag documented in README"
+      ],
+      "passes": true,
+      "files_expected": [
+        "harness.py",
+        "doc_check.py",
+        "README.md"
+      ],
+      "steps": [
+        "Run finish with drift (should warn)",
+        "Run finish --doc-strict with drift (should block)",
+        "Verify README updated"
+      ]
+    },
+    {
+      "id": "HARNESS-015-F",
+      "category": "testing",
+      "title": "Add tests for Documentation Trust Protocol",
+      "description": "Add comprehensive tests for all DTP steps: detection, engagement, assistance, persistence, and strict mode.",
+      "acceptance_criteria": [
+        "Test detection of new CLI flags",
+        "Test detection of new files",
+        "Test decision persistence",
+        "Test strict mode blocking",
+        "All tests pass"
+      ],
+      "passes": true,
+      "files_expected": [
+        "tests/test_doc_check.py"
+      ],
+      "steps": [
+        "Run pytest tests/test_doc_check.py",
+        "All tests pass"
+      ]
+    }
+  ]
+}

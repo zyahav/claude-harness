@@ -23,6 +23,7 @@ This agent requires the following environment variables to be **transported** in
 - **`harness.py`**: The raw script (developer fallback).
 - **`lifecycle.py`**: Git worktree and branch management.
 - **`schema.py`**: The validator for `handoff.json`. **Note:** Uses Python `dataclasses` (Standard Library) for dependency-free validation. Not Pydantic.
+- **`doc_check.py`**: Documentation Trust Protocol implementation. Detects and tracks documentation drift for CLI flags and public Python files.
 
 ## 3. Standard Operating Procedures
 

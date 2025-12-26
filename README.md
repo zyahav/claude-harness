@@ -129,10 +129,19 @@ c-harness run my-feature-run
 ```
 
 ### 4. Finish a run
-Verifies all tasks are complete, pushes the branch to the remote repository, and provides PR instructions.
+Verifies all tasks are complete, checks for documentation drift, pushes the branch to the remote repository, and provides PR instructions.
 ```bash
 c-harness finish my-feature-run
 ```
+
+**Documentation Trust Protocol (DTP):**
+By default, `finish` checks for undocumented changes (new CLI flags, new public Python files) and displays a warning. To enforce documentation compliance, use `--doc-strict`:
+
+```bash
+c-harness finish my-feature-run --doc-strict
+```
+
+With `--doc-strict`, the command will block if documentation drift is detected. To mark items as internal or manage deferred items, edit `.harness/doc_decisions.json`.
 
 ### 5. Clean up
 Removes the worktree and optionally deletes the local branch.
