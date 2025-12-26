@@ -620,7 +620,6 @@ async def run_autonomous_agent(
             break
 
         # Print session header
-        # TODO: Update progress.py to use logging or capture its output
         print_session_header(iteration, is_first_run)
 
         # Update Archon with current task status (if not initializer run)

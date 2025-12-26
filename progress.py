@@ -6,7 +6,10 @@ Functions for tracking and displaying progress of the autonomous coding agent.
 """
 
 import json
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def count_passing_tests(project_dir: Path) -> tuple[int, int]:
@@ -48,10 +51,11 @@ def print_session_header(session_num: int, is_initializer: bool) -> None:
     """Print a formatted header for the session."""
     session_type = "INITIALIZER" if is_initializer else "CODING AGENT"
 
-    print("\n" + "=" * 70)
-    print(f"  SESSION {session_num}: {session_type}")
-    print("=" * 70)
-    print()
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info(f"  SESSION {session_num}: {session_type}")
+    logger.info("=" * 70)
+    logger.info("")
 
 
 def print_progress_summary(project_dir: Path) -> None:
@@ -60,6 +64,6 @@ def print_progress_summary(project_dir: Path) -> None:
 
     if total > 0:
         percentage = (passing / total) * 100
-        print(f"\nProgress: {passing}/{total} tests passing ({percentage:.1f}%)")
+        logger.info(f"Progress: {passing}/{total} tests passing ({percentage:.1f}%)")
     else:
-        print("\nProgress: handoff.json not yet created")
+        logger.info("Progress: handoff.json not yet created")
