@@ -127,7 +127,14 @@ def handle_start(args: argparse.Namespace) -> None:
         if args.dry_run:
             logging.info(f"[DRY-RUN] Would start run '{args.name}' from base '{args.base}'")
         
-        run_dir = lifecycle.create_run(args.name, args.base, repo_path=args.repo_path, dry_run=args.dry_run)
+        run_dir = lifecycle.create_run(
+            name=args.name,
+            base_branch=args.base,
+            repo_path=args.repo_path,
+            dry_run=args.dry_run,
+            archon=getattr(args, 'archon', False),
+            handoff_path=getattr(args, 'handoff_path', None),
+        )
         
         if args.dry_run:
             logging.info(f"[DRY-RUN] Would create worktree at: {run_dir}")
@@ -314,6 +321,12 @@ def main() -> None:
     start_parser.add_argument("name", help="Name of the run (used for branch and folder)")
     start_parser.add_argument("--base", default="main", help="Base branch to start from (default: main)")
     start_parser.add_argument("--repo-path", default=".", help="Path to the target repository (default: current dir)")
+    start_parser.add_argument("--mode", choices=["greenfield", "brownfield"], default="greenfield",
+                             help="Mode: 'greenfield' (new project) or 'brownfield' (existing codebase)")
+    start_parser.add_argument("--handoff-path", type=Path, default=None,
+                             help="Path to handoff.json (for Archon task import)")
+    start_parser.add_argument("--archon", action="store_true",
+                             help="Create Archon project for visibility into agent work")
     start_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     start_parser.set_defaults(func=handle_start)
 
