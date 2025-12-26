@@ -32,6 +32,9 @@ import logging
 import json
 from datetime import datetime
 
+# Import doc_check module for Documentation Trust Protocol
+import doc_check
+
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 DEFAULT_SPEC_PATH = Path("prompts/app_spec.txt")
@@ -233,7 +236,7 @@ def handle_list(args: argparse.Namespace) -> None:
 
 
 def handle_finish(args: argparse.Namespace) -> None:
-    """Finish a run: verify status and push branch."""
+    """Finish a run: verify status, check docs, and push branch."""
     if args.dry_run:
         logging.info(f"[DRY-RUN] Would finish run '{args.name}' and push branch.")
         return
@@ -241,7 +244,7 @@ def handle_finish(args: argparse.Namespace) -> None:
     try:
         meta = lifecycle.load_run_metadata(args.name)
         project_dir = Path(meta.project_dir)
-        
+
         # Resolve handoff path:
         # 1. Custom path (CLI arg)
         # 2. Default: project_dir / "handoff.json"
@@ -249,23 +252,132 @@ def handle_finish(args: argparse.Namespace) -> None:
             handoff_path = Path(args.handoff_path).resolve()
         else:
             handoff_path = project_dir / "handoff.json"
-        
+
         # Verify handoff.json
         if not handoff_path.exists():
             print(f"Error: handoff.json not found at {handoff_path}")
             sys.exit(1)
-            
+
         handoff = schema.load_handoff(handoff_path)
         passing, total = handoff.count_passing()
-        
+
         print(f"Run: {args.name}")
         print(f"Progress: {passing}/{total} tasks passing")
-        
+
         if passing < total and not args.force:
             print("\nWarning: Not all tasks are marked as passing.")
             print("Use --force to finish anyway.")
             sys.exit(1)
-            
+
+        # Documentation Trust Protocol: Detect drift before push
+        print("\nChecking for documentation drift...")
+        has_drift, drift_items, decision_store = doc_check.check_drift_before_finish(project_dir)
+
+        if has_drift:
+            print(f"\n⚠️  Documentation drift detected: {len(drift_items)} item(s)")
+            print("\nUndocumented changes found:")
+
+            for i, drift in enumerate(drift_items, 1):
+                print(f"  {i}. [{drift.type}] {drift.item}")
+                print(f"     → Should be documented in: {drift.location}")
+
+            # Documentation Awareness Notice (Engage step)
+            print("\n⚠️  Documentation Awareness Notice")
+            print("-" * 50)
+            print("The following changes should be documented to maintain project health.")
+            print("\nHow would you like to proceed?")
+            print("  1) Update documentation now")
+            print("  2) Mark as internal (not for public docs)")
+            print("  3) Defer (ask again in 7 days)")
+            print("  4) Continue without changes")
+
+            # Get user choice
+            try:
+                choice = input("\nEnter choice [1-4]: ").strip()
+
+                if choice == "1":
+                    # Update documentation
+                    print("\n📝 Documentation Update Assistance")
+                    print("-" * 50)
+                    print("Please provide a brief description for each undocumented item:")
+
+                    for drift in drift_items:
+                        item_id = doc_check.DocDecisionStore._make_item_id(drift)
+                        print(f"\nItem: {drift.item} ({drift.type})")
+                        description = input(f"  Description (or press Enter to skip): ").strip()
+
+                        if description:
+                            # For now, just save the decision with description
+                            # In a future enhancement, this could auto-edit the docs
+                            decision_store.set_decision(item_id, 'documented', description)
+                            print(f"  ✓ Decision saved: {description}")
+                        else:
+                            print(f"  ⊘ Skipped")
+
+                    print("\n✓ Documentation decisions recorded")
+                    print("  Note: Automatic documentation editing is planned for a future update.")
+                    print("  Please manually update the documentation files based on your descriptions.")
+
+                    # Re-check for remaining drift
+                    remaining_drift = decision_store.get_pending_items(drift_items)
+
+                    if remaining_drift:
+                        print(f"\n⚠️  {len(remaining_drift)} item(s) still need attention")
+                        if not doc_strict:
+                            print("  Continuing with warning...")
+                        else:
+                            print("\n❌ --doc-strict mode: Cannot finish with unresolved drift")
+                            sys.exit(1)
+                    else:
+                        print("\n✓ All items addressed")
+
+                elif choice == "2":
+                    # Mark as internal
+                    print("\n🔒 Marking items as internal...")
+                    for drift in drift_items:
+                        item_id = doc_check.DocDecisionStore._make_item_id(drift)
+                        decision_store.set_decision(item_id, 'internal')
+                        print(f"  ✓ {drift.item} marked as internal")
+                    print("\n✓ Items marked as internal - will not be flagged again")
+
+                elif choice == "3":
+                    # Defer
+                    print("\n⏰ Deferring documentation...")
+                    for drift in drift_items:
+                        item_id = doc_check.DocDecisionStore._make_item_id(drift)
+                        decision_store.set_decision(item_id, 'deferred')
+                        print(f"  ✓ {drift.item} deferred (will ask again in 7 days)")
+                    print("\n✓ Items deferred - you will be asked again on future runs")
+
+                elif choice == "4":
+                    # Continue without changes
+                    print("\n⚠️  Continuing without addressing documentation drift...")
+
+                else:
+                    print("\n⚠️  Invalid choice. Continuing without changes...")
+
+            except (EOFError, KeyboardInterrupt):
+                # Non-interactive mode
+                print("\n⚠️  Non-interactive mode: Continuing with warning...")
+
+            # Check if --doc-strict mode is enabled
+            doc_strict = getattr(args, 'doc_strict', False)
+
+            if doc_strict:
+                # Re-check drift after any decisions made
+                remaining_drift = decision_store.get_pending_items(drift_items)
+                if remaining_drift:
+                    print("\n❌ --doc-strict mode enabled: Blocking finish due to unresolved drift")
+                    print("   Options:")
+                    print("   - Document the changes and run finish again")
+                    print("   - Mark items as internal using .harness/doc_decisions.json")
+                    print("   - Run without --doc-strict to finish anyway")
+                    sys.exit(1)
+            else:
+                print("\n⚠️  Documentation drift detected. To enforce documentation, use: --doc-strict")
+        else:
+            print("✓ No documentation drift detected")
+
         print(f"\nPushing branch {meta.branch}...")
         try:
             # Push from the TARGET REPO (repo_path), not the harness dir
@@ -274,11 +386,11 @@ def handle_finish(args: argparse.Namespace) -> None:
         except RuntimeError as e:
             print(f"Error pushing branch: {e}")
             sys.exit(1)
-            
+
         print("\nSuccess! Create your Pull Request here:")
         # TODO: Detect repo URL from git config for a clickable link
         print(f"  Branch: {meta.branch}")
-        
+
     except FileNotFoundError:
         print(f"Error: Run '{args.name}' not found.")
         sys.exit(1)
@@ -356,6 +468,7 @@ def main() -> None:
     finish_parser.add_argument("--force", "-f", action="store_true", help="Finish even if tasks are incomplete")
     # Added --handoff-path here
     finish_parser.add_argument("--handoff-path", default=None, help="Path to handoff.json (default: project_dir/handoff.json)")
+    finish_parser.add_argument("--doc-strict", action="store_true", help="Block finish if documentation drift is detected")
     finish_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     finish_parser.set_defaults(func=handle_finish)
 
