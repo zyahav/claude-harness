@@ -164,15 +164,18 @@ Before context fills up:
 
 **ALL testing must use browser automation tools.**
 
-Available tools:
-- puppeteer_navigate - Start browser and go to URL
-- puppeteer_screenshot - Capture screenshot
-- puppeteer_click - Click elements
-- puppeteer_fill - Fill form inputs
-- puppeteer_evaluate - Execute JavaScript (use sparingly, only for debugging)
+Available tools (Chrome DevTools MCP):
+- navigate_page - Open browser and go to URL
+- take_screenshot - Capture screenshot of page or element
+- take_snapshot - Get text snapshot of page elements with UIDs
+- click - Click elements by UID
+- fill - Fill form inputs by UID
+- hover - Hover over elements
+- evaluate_script - Execute JavaScript (use sparingly, only for debugging)
+- list_console_messages - Check for console errors
+- list_network_requests - Monitor network activity
 
 Test like a human user with mouse and keyboard. Don't take shortcuts by using JavaScript evaluation.
-Don't use the puppeteer "active tab" tool.
 
 ---
 

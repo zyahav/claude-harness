@@ -59,6 +59,14 @@ See [Brownfield Quick Start](docs/BROWNFIELD_QUICKSTART.md) for a complete guide
 
 ## Installation
 
+### Prerequisites
+
+- **Python 3.10+**
+- **Node.js 18+** (for browser automation via MCP)
+- **Google Chrome** (for UI testing and verification)
+
+### Setup
+
 ```bash
 # Clone the repository
 git clone https://github.com/zyahav/claude-harness.git
@@ -68,19 +76,27 @@ cd claude-harness
 pip install -r requirements.txt
 
 # For full agent functionality (requires access to private SDK):
-# For full agent functionality (requires access to private SDK):
 pip install -r requirements-sdk.txt
 
 # Install the tool in editable mode to get the 'c-harness' command:
 pip install -e .
 ```
 
+### Browser Automation
+
+c-harness uses [Chrome DevTools MCP](https://github.com/anthropics/anthropic-quickstarts/tree/main/mcp-servers/chrome-devtools) for browser automation. This allows agents to:
+- Navigate to URLs and take screenshots
+- Click elements and fill forms
+- Verify UI behavior end-to-end
+- Check console errors and network requests
+
+The MCP server is automatically downloaded via `npx` when the agent runs.
+
 ## Quick Start (Orchestrator Mode)
 
 The recommended way to use `claude-harness` is as an external orchestrator managing other repositories.
 
 ```bash
-# 1. Start a new run for an external repo
 # 1. Start a new run for an external repo
 c-harness start my-task --repo-path ../target-repo
 

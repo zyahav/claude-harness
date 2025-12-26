@@ -2,12 +2,13 @@
 
 This document outlines the future development phases and planned improvements for `claude-harness`.
 
-## Phase 4: UI Capabilities (Planned)
+## Phase 4: UI Capabilities (Complete)
 **Goal:** Verify the agent's ability to interact with web interfaces.
-- [ ] **Restore UI Tests:** Create `tests/test_ui_capabilities.py` to verify the Puppeteer MCP integration.
-    - Launch a local test server.
-    - Verify agent can navigate, click, and take screenshots.
-    - *Rationale:* The infrastructure exists in `client.py`, but automated verification is currently missing.
+- [x] **Browser Automation:** Migrated from `puppeteer-mcp-server` to `chrome-devtools-mcp` (official, actively maintained).
+- [x] **UI Tests:** Created `tests/test_ui_capabilities.py` to verify Chrome DevTools MCP integration.
+    - Verifies package availability
+    - Verifies tool configuration in client.py
+    - *Note:* Full browser tests require Chrome and are primarily for manual verification.
 
 ## Phase 5: Schema Hardening (Planned)
 **Goal:** Improve data integrity for the `handoff.json` format.
