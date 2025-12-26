@@ -28,6 +28,7 @@ class RunMetadata:
     status: str  # "active", "finished", "failed"
     project_dir: str
     repo_path: str  # Added: path to the target repository
+    archon: Optional[dict] = None  # Archon integration data (project_id, task_ids)
 
 
 def run_git(cmd: List[str], cwd: Optional[Path] = None, dry_run: bool = False) -> str:
