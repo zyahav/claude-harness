@@ -70,9 +70,17 @@ def create_client(project_dir: Path, model: str) -> "ClaudeSDKClient":
 
     if not oauth_token and not api_key:
         raise ValueError(
-            "Authentication not configured. Set one of:\n"
-            "- CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token`)\n"
-            "- ANTHROPIC_API_KEY"
+            "\n"
+            "🔑 Authentication needed\n"
+            "\n"
+            "To run the agent, export one of these in your terminal:\n"
+            "\n"
+            "  export ANTHROPIC_API_KEY=\"your-key\"\n"
+            "\n"
+            "Or if using Claude Code OAuth:\n"
+            "\n"
+            "  export CLAUDE_CODE_OAUTH_TOKEN=\"your-token\"\n"
+            "  (run `claude setup-token` to get the token)\n"
         )
 
     # Create comprehensive security settings
