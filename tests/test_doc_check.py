@@ -59,8 +59,10 @@ class TestDocChecker(unittest.TestCase):
 
 ## Usage
 
-c-harness start my-app --repo-path ../target --mode greenfield
-c-harness finish my-app --force
+```bash
+c-harness start my-app `--repo-path` ../target `--mode` greenfield
+c-harness finish my-app `--force`
+```
 """)
 
         # Create sample AGENT_GUIDE.md
@@ -317,16 +319,16 @@ class TestIntegration(unittest.TestCase):
 
     def test_no_drift_scenario(self):
         """Test scenario with no documentation drift."""
-        # Document the flag in README
-        readme = self.readme_path.read_text()
-        readme += '\nUsage: `c-harness start --new-flag`\n'
-        self.readme_path.write_text(readme)
+        # Document the flag in README with backticks
+        self.readme_path.write_text('# Test\n\nUsage: `--new-flag`\n')
+        
+        # Document harness.py in AGENT_GUIDE
+        self.agent_guide_path.write_text('# Guide\n\n- **`harness.py`**: CLI entry\n')
 
         has_drift, drift_items, store = doc_check.check_drift_before_finish(self.test_dir_path)
 
-        # Should not detect CLI flag drift
-        cli_drift = [d for d in drift_items if d.type == 'cli_flag']
-        self.assertEqual(len(cli_drift), 0)
+        # Should not detect any drift now
+        self.assertEqual(len(drift_items), 0)
 
 
 if __name__ == "__main__":
