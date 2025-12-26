@@ -1,20 +1,9 @@
 {
-  "name": "HARNESS-014",
-  "branch": "run/HARNESS-014",
-  "created_at": 1766775851.450936,
+  "name": "HARNESS-016",
+  "branch": "run/HARNESS-016",
+  "created_at": 1766782917.455374,
   "status": "active",
-  "project_dir": "/Users/zyahav/Documents/dev/claude-harness/runs/HARNESS-014",
+  "project_dir": "/Users/zyahav/Documents/dev/claude-harness/runs/HARNESS-016",
   "repo_path": "/Users/zyahav/Documents/dev/claude-harness",
-  "archon": {
-    "project_id": "5280615c-124a-4752-9d8d-010efc2d1c4c",
-    "title": "claude-harness / HARNESS-014",
-    "task_ids": {
-      "HARNESS-014-A": "6c092390-ae51-4f6b-8903-23a25addf6c5",
-      "HARNESS-014-B": "df72ed28-548f-44dc-971a-e67a1c11e19b",
-      "HARNESS-014-C": "70746c6a-b94c-45d4-b909-2c9c5dfaf250",
-      "HARNESS-014-D": "ae459e3a-47e6-4ac8-8427-2c3950ad064c",
-      "HARNESS-014-E": "c9ac6277-2c1d-480d-95a1-e98e178846f4",
-      "HARNESS-014-F": "c7d61a54-27b0-4c97-9374-9ab90c1eaf39"
-    }
-  }
+  "archon": null
 }
