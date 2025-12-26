@@ -67,7 +67,7 @@ class TestAgent(unittest.IsolatedAsyncioTestCase):
         mock_validate.return_value = [] # Valid schema
         
         with patch.object(Path, 'exists', return_value=True): # handoff.json exists
-            with patch('agent.get_coding_prompt') as mock_prompt_getter:
+            with patch('agent.get_prompt_for_mode') as mock_prompt_getter:
                 await agent.run_autonomous_agent(
                     self.project_dir, 
                     model="test-model", 
