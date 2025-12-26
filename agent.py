@@ -30,7 +30,9 @@ try:
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
-    logger.warning("watchdog not available - file watching disabled")
+    Observer = None
+    FileSystemEventHandler = object  # Fallback base class
+    FileModifiedEvent = None
 
 # Global Archon reference for current session
 _archon_project: Optional[archon_integration.ArchonProject] = None
