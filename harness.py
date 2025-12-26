@@ -180,6 +180,8 @@ def handle_run(args: argparse.Namespace) -> None:
         logging.info(f"Worktree: {project_dir}")
         logging.info(f"Branch: {meta.branch}")
         logging.info(f"Mode: {args.mode}")
+        if args.handoff_path:
+            logging.info(f"Handoff: {args.handoff_path}")
         
         # Import agent here (lazy load)
         from agent import run_autonomous_agent
@@ -191,6 +193,7 @@ def handle_run(args: argparse.Namespace) -> None:
                 max_iterations=args.max_iterations,
                 spec_path=args.spec,
                 mode=args.mode,
+                handoff_path=args.handoff_path,
             )
         )
     except FileNotFoundError:
@@ -322,6 +325,8 @@ def main() -> None:
     run_parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC_PATH, help="Path to app spec")
     run_parser.add_argument("--mode", choices=["greenfield", "brownfield"], default="greenfield",
                            help="Mode: 'greenfield' (new project) or 'brownfield' (existing codebase). Default: greenfield")
+    run_parser.add_argument("--handoff-path", type=Path, default=None,
+                           help="Path to handoff.json for brownfield mode (default: <worktree>/handoff.json)")
     run_parser.add_argument("--repo-path", default=".", help="Path to the target repository (for context)")
     run_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     run_parser.set_defaults(func=handle_run)
