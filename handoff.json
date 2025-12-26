@@ -1,96 +1,341 @@
 {
   "meta": {
     "project": "claude-harness",
-    "phase": "Real-time Archon Task Tracking",
-    "source": "manual",
+    "phase": "HARNESS-018: Harness Commander (ADHD-First Control Plane)",
+    "source": "docs/final_handoff_v_4_harness_commander.md",
     "lock": true
   },
   "tasks": [
     {
-      "id": "HARNESS-016-A",
-      "category": "functional",
-      "title": "Add handoff.json file watcher",
-      "description": "Create a file watcher that monitors handoff.json for changes during agent session. When the file is modified, detect which task changed and trigger Archon update.",
+      "id": "HARNESS-018-A",
+      "category": "foundation",
+      "title": "Create state management module with atomic writes",
+      "description": "Implement the core state management system for Commander with atomic file writes, state.json schema, and UUID-based IDs. This is the foundation for all Commander functionality.",
       "acceptance_criteria": [
-        "File watcher monitors handoff.json during session",
-        "Detects when file is written/modified",
-        "Triggers callback with changed content",
-        "Does not block agent execution"
+        "state.py module created with StateManager class",
+        "Creates ~/.cloud-harness/ directory structure",
+        "Implements atomic write pattern (temp file + fsync + rename)",
+        "State schema: focusProjectId, projects[], runs[], tasks[], inbox[]",
+        "All IDs use UUID v4",
+        "Recovers from incomplete writes (deletes .tmp files)",
+        "Unit tests for state management"
       ],
       "passes": true,
-      "files_expected": [
-        "agent.py"
-      ],
+      "files_expected": ["state.py", "tests/test_state.py"],
       "steps": [
-        "Import watchdog or use polling mechanism",
-        "Start watcher before agent session",
-        "Stop watcher after session ends"
+        "Create state.py with StateManager class",
+        "Implement atomic_write() method (tmp file + fsync + rename)",
+        "Define State dataclass with all required fields",
+        "Implement load_state() and save_state()",
+        "Add crash recovery (cleanup .tmp files on load)",
+        "Write unit tests for atomic writes and crash recovery"
       ]
     },
     {
-      "id": "HARNESS-016-B",
-      "category": "functional",
-      "title": "Detect task status changes in real-time",
-      "description": "When handoff.json changes, compare previous state to new state. Identify which specific task changed (passes: false → true, or description changed indicating work started).",
+      "id": "HARNESS-018-B",
+      "category": "foundation",
+      "title": "Implement event logging system",
+      "description": "Create an append-only event logging system that records all Commander actions for audit trail and debugging.",
       "acceptance_criteria": [
-        "Tracks previous state of all tasks",
-        "Detects when a task passes changes to true",
-        "Detects when task description/files change (work started)",
-        "Returns list of changed task IDs with change type"
+        "events.py module created with EventLogger class",
+        "Logs to ~/.cloud-harness/events.log",
+        "Append-only JSON lines format",
+        "Supports all event types: SESSION_STARTED, COMMAND_PLAN, LOCK_ACQUIRED, etc.",
+        "Each event includes timestamp and sessionId",
+        "Unit tests for event logging"
       ],
       "passes": true,
-      "files_expected": [
-        "agent.py"
-      ],
+      "files_expected": ["events.py", "tests/test_events.py"],
       "steps": [
-        "Store task states before watching",
-        "On file change, parse new JSON",
-        "Compare each task field",
-        "Identify change type: started vs completed"
+        "Create events.py with EventLogger class",
+        "Define Event dataclass with timestamp, type, sessionId, data",
+        "Implement log_event() with append-only file writes",
+        "Add event type constants/enums",
+        "Write unit tests for logging and parsing"
       ]
     },
     {
-      "id": "HARNESS-016-C",
-      "category": "functional",
-      "title": "Update Archon immediately on task change",
-      "description": "When a task change is detected: if work started on a new task, update it to 'doing'. If task completed (passes: true), update to 'review'. This happens in real-time, not at end of iteration.",
+      "id": "HARNESS-018-C",
+      "category": "concurrency",
+      "title": "Implement controller lock with PID and heartbeat",
+      "description": "Create the concurrency control system that ensures only one controller session can mutate state at a time, with crash recovery via PID liveness and heartbeat checks.",
       "acceptance_criteria": [
-        "Task moves to 'doing' when agent starts working on it",
-        "Task moves to 'review' when passes becomes true",
-        "Updates happen within seconds of change",
-        "Multiple tasks can transition in sequence during one session"
+        "locking.py module created with LockManager class",
+        "Creates ~/.cloud-harness/locks/ directory",
+        "Atomic lock acquisition using flock or O_EXCL",
+        "Lock file contains: pid, startTime, sessionId",
+        "Heartbeat file contains: sessionId, lastBeatAt",
+        "Checks PID liveness and heartbeat freshness (5min timeout)",
+        "Supports stale takeover (dead PID or stale heartbeat)",
+        "Lock release on exit via atexit handler",
+        "Unit tests for locking scenarios"
       ],
       "passes": true,
-      "files_expected": [
-        "agent.py",
-        "archon_integration.py"
-      ],
+      "files_expected": ["locking.py", "tests/test_locking.py"],
       "steps": [
-        "Hook file watcher to Archon update functions",
-        "Call start_task() when work detected",
-        "Call update_task_status('review') when completed",
-        "Log each transition"
+        "Create locking.py with LockManager class",
+        "Implement acquire_lock() with atomic file creation",
+        "Implement check_pid_alive() using os.kill(pid, 0)",
+        "Implement check_heartbeat() with 5-minute timeout",
+        "Implement release_lock() with atexit registration",
+        "Add heartbeat update for interactive sessions",
+        "Handle stale takeover scenarios",
+        "Write unit tests for concurrent acquisition and recovery"
       ]
     },
     {
-      "id": "HARNESS-016-D",
+      "id": "HARNESS-018-D",
+      "category": "reconciliation",
+      "title": "Implement Git-first reconciliation engine",
+      "description": "Create the reconciliation system that syncs Commander state with Git/worktree reality. This is critical for preventing 'split brain' state.",
+      "acceptance_criteria": [
+        "reconcile.py module created with Reconciler class",
+        "Runs git status, git worktree list, c-harness list",
+        "Detects drift: missing worktrees, branch changes, dirty trees",
+        "Adopts Git reality over cached registry state",
+        "30-second result caching",
+        "Parks runs with missing worktrees",
+        "Dirty working tree policy (refuse mutations)",
+        "Worktree path safety (normalize, allowlist, marker check)",
+        "Unit tests for reconciliation scenarios"
+      ],
+      "passes": false,
+      "files_expected": ["reconcile.py", "tests/test_reconcile.py"],
+      "steps": [
+        "Create reconcile.py with Reconciler class",
+        "Implement run_reconcile() that calls git/harness commands",
+        "Implement detect_drift() to compare registry vs reality",
+        "Implement adopt_reality() to update state from Git",
+        "Add 30-second caching decorator",
+        "Implement dirty_tree_check() for working tree safety",
+        "Implement worktree_path_validation() with allowlist and marker",
+        "Write unit tests for drift detection and adoption"
+      ]
+    },
+    {
+      "id": "HARNESS-018-E",
+      "category": "command",
+      "title": "Implement 'c-harness status' command",
+      "description": "Create the status command that outputs a single line showing current mode, focus project, active run, and controller info.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'status' subcommand",
+        "Outputs: 'Controller | focus: X | run: Y | state: Z'",
+        "Observer mode: 'Observer | ... | controller: PID N'",
+        "Acquires no lock (read-only)",
+        "Returns exit code 0 for success, 1 for errors",
+        "Integration tests for status output"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py"],
+      "steps": [
+        "Add handle_status() function to harness.py",
+        "Determine if Controller or Observer mode",
+        "Read state.json for focus project and active run",
+        "Format output line",
+        "Add integration tests"
+      ]
+    },
+    {
+      "id": "HARNESS-018-F",
+      "category": "command",
+      "title": "Implement 'c-harness doctor' command",
+      "description": "Create the doctor command that runs pre-flight checks on Git, home directory, state file, lock directory, and engine availability.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'doctor' subcommand",
+        "Runs all checks: Git version, home dir, locks, state, engine",
+        "Output format: '[✓] Check name' or '[!] Check name — message'",
+        "Summary line: 'Status: X passed, Y warnings, Z errors'",
+        "Supports --repair-state flag",
+        "--repair-state runs reconcile and fixes safe issues",
+        "Never deletes user data automatically",
+        "Integration tests for doctor checks"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py", "tests/test_doctor.py"],
+      "steps": [
+        "Add handle_doctor() function to harness.py",
+        "Implement individual check functions",
+        "Format output with symbols (✓/!)",
+        "Add --repair-state flag handler",
+        "Implement safe repairs (park missing runs, delete tmp files)",
+        "Write integration tests"
+      ]
+    },
+    {
+      "id": "HARNESS-018-G",
+      "category": "command",
+      "title": "Implement 'c-harness session' command (interactive cockpit)",
+      "description": "Create the interactive session command that runs doctor, reconciles, acquires controller lock, and displays the cockpit with next action. This is the primary user interface.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'session' subcommand",
+        "Runs doctor preflight on start",
+        "Runs reconcile and acquires controller lock",
+        "Starts heartbeat loop (60s interval)",
+        "Displays cockpit sections: Focus Now, In Preview, Blocked, Active Runs, Inbox",
+        "Ends with: Next Action / Why / Done Criteria",
+        "Handles Ctrl+C gracefully (releases lock)",
+        "Observer mode if lock denied",
+        "Integration tests for session lifecycle"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py", "cockpit.py", "tests/test_session.py"],
+      "steps": [
+        "Create cockpit.py with display functions",
+        "Add handle_session() function to harness.py",
+        "Run doctor and reconcile on start",
+        "Acquire lock (become observer if denied)",
+        "Start heartbeat thread in controller mode",
+        "Format cockpit display from state",
+        "Compute and display next action",
+        "Handle keyboard interrupt for clean exit",
+        "Write integration tests"
+      ]
+    },
+    {
+      "id": "HARNESS-018-H",
+      "category": "command",
+      "title": "Implement 'c-harness next' command",
+      "description": "Create the next action command that computes and displays the single next step using the rule engine.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'next' subcommand",
+        "Runs reconcile (cached)",
+        "Computes next action using rule engine priority",
+        "Outputs: Next Action / Why / Done Criteria",
+        "Acquires no lock (read-only)",
+        "Rule engine: clean → tests → finish → focus → start → tasks",
+        "Integration tests for next action logic"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py", "rules.py", "tests/test_rules.py"],
+      "steps": [
+        "Create rules.py with compute_next_action() function",
+        "Implement priority logic (finish → focus → start → tasks)",
+        "Add handle_next() function to harness.py",
+        "Format output with Action/Why/Done",
+        "Write integration tests for rule engine"
+      ]
+    },
+    {
+      "id": "HARNESS-018-I",
+      "category": "command",
+      "title": "Implement 'c-harness focus' command",
+      "description": "Create the focus command for setting and viewing the focus project.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'focus' subcommand",
+        "Supports: 'focus set <projectId|name>' and 'focus' (view)",
+        "Requires controller lock for 'set'",
+        "Runs reconcile before setting",
+        "Requires confirmation if switching from current focus",
+        "Updates state.focusProjectId atomically",
+        "Integration tests for focus management"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py"],
+      "steps": [
+        "Add handle_focus() function to harness.py",
+        "Implement 'focus set' with lock acquisition",
+        "Add confirmation prompt for focus changes",
+        "Update state atomically",
+        "Implement 'focus' (view) as read-only",
+        "Write integration tests"
+      ]
+    },
+    {
+      "id": "HARNESS-018-J",
+      "category": "command",
+      "title": "Implement 'c-harness inbox' command",
+      "description": "Create the inbox command for capturing, listing, promoting, and dismissing ideas.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'inbox' subcommand",
+        "Supports: inbox 'text', inbox list, inbox promote <id>, inbox dismiss <id>",
+        "Capture is fire-and-forget (no prompts)",
+        "list and promote require controller lock",
+        "promote creates a Task linked to focus project",
+        "dismiss removes item from inbox",
+        "Integration tests for inbox lifecycle"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py"],
+      "steps": [
+        "Add handle_inbox() function to harness.py",
+        "Implement subcommands: add, list, promote, dismiss",
+        "Generate UUID for new inbox items",
+        "Implement promote task creation",
+        "Write integration tests"
+      ]
+    },
+    {
+      "id": "HARNESS-018-K",
+      "category": "command",
+      "title": "Implement 'c-harness bootstrap' command",
+      "description": "Create the bootstrap command for installation checks and update discovery.",
+      "acceptance_criteria": [
+        "Added to harness.py as 'bootstrap' subcommand",
+        "Checks if harness is installed/available",
+        "Prints install steps if missing (never silent install)",
+        "Checks for updates (notification only, no auto-update)",
+        "Supports --apply flag for explicit updates",
+        "Integration tests for bootstrap scenarios"
+      ],
+      "passes": false,
+      "files_expected": ["harness.py"],
+      "steps": [
+        "Add handle_bootstrap() function to harness.py",
+        "Check for c-harness installation",
+        "Implement version check against GitHub/PyPI",
+        "Add --apply flag for updates",
+        "Write integration tests"
+      ]
+    },
+    {
+      "id": "HARNESS-018-L",
       "category": "testing",
-      "title": "Test real-time Archon updates",
-      "description": "Add tests to verify that Archon task statuses update in real-time as the agent works, not just at the end of iterations.",
+      "title": "Write comprehensive integration tests",
+      "description": "Create end-to-end integration tests covering concurrency, reconciliation, verification, and state safety scenarios.",
       "acceptance_criteria": [
-        "Test file watcher detects changes",
-        "Test task state comparison logic",
-        "Test Archon is called for each transition",
+        "tests/test_integration.py created",
+        "Tests for concurrent sessions (one controller, one observer)",
+        "Tests for crash recovery (stale PID takeover)",
+        "Tests for hung process recovery (heartbeat timeout)",
+        "Tests for reconcile drift scenarios",
+        "Tests for dirty tree policy enforcement",
+        "Tests for worktree path safety",
+        "Tests for state atomic writes and crash recovery",
         "All tests pass"
       ],
-      "passes": true,
-      "files_expected": [
-        "tests/test_archon_integration.py"
-      ],
+      "passes": false,
+      "files_expected": ["tests/test_integration.py"],
       "steps": [
-        "Mock file changes",
-        "Verify watcher callback fires",
-        "Verify Archon functions called correctly"
+        "Create test_integration.py",
+        "Test concurrent session acquisition",
+        "Test PID crash and heartbeat timeout scenarios",
+        "Test reconcile with manual worktree deletion",
+        "Test dirty tree refusal for mutating commands",
+        "Test worktree path validation",
+        "Test crash during state write (kill mid-write)",
+        "Test state file corruption and doctor repair"
+      ]
+    },
+    {
+      "id": "HARNESS-018-M",
+      "category": "documentation",
+      "title": "Update README and AGENT_GUIDE for Commander",
+      "description": "Update project documentation to describe the new Harness Commander layer and its usage.",
+      "acceptance_criteria": [
+        "README.md updated with Commander section",
+        "AGENT_GUIDE.md updated with Commander usage for agents",
+        "Examples include Commander workflows",
+        "Phase 1 limitations documented (no Convex yet)",
+        "Doc check passes"
+      ],
+      "passes": false,
+      "files_expected": ["README.md", "AGENT_GUIDE.md"],
+      "steps": [
+        "Update README.md with Phase 1 features",
+        "Document session/next/status/focus/inbox/doctor/bootstrap",
+        "Update AGENT_GUIDE.md with Commander usage",
+        "Add example workflows",
+        "Run doc check to verify compliance"
       ]
     }
   ]
