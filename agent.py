@@ -103,6 +103,7 @@ async def run_autonomous_agent(
     model: str,
     max_iterations: Optional[int] = None,
     spec_path: Optional[Path] = None,
+    handoff_path: Optional[Path] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -112,6 +113,7 @@ async def run_autonomous_agent(
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         spec_path: Path to the constitution/spec file (None for default)
+        handoff_path: Path to handoff.json (None defaults to project_dir/handoff.json)
     """
     logger.info("\n" + "=" * 70)
     logger.info("  AUTONOMOUS CODING AGENT DEMO")
@@ -127,9 +129,11 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    # Resolve handoff path: provided path or default to project_dir/handoff.json
+    handoff_file = handoff_path if handoff_path else project_dir / "handoff.json"
+    
     # Check if this is a fresh start or continuation
-    tests_file = project_dir / "handoff.json"
-    is_first_run = not tests_file.exists()
+    is_first_run = not handoff_file.exists()
 
     if is_first_run:
         logger.info("Fresh start - will use initializer agent")
@@ -144,9 +148,10 @@ async def run_autonomous_agent(
         copy_spec_to_project(project_dir, spec_path)
     else:
         logger.info("Continuing existing project")
+        logger.info(f"Handoff: {handoff_file}")
         
         # Validate schema before continuing
-        errors = schema.validate_handoff_file(tests_file)
+        errors = schema.validate_handoff_file(handoff_file)
         if errors:
             logger.error(f"\nError: handoff.json is invalid:")
             for error in errors:
@@ -154,7 +159,7 @@ async def run_autonomous_agent(
             logger.error("\nPlease fix the schema errors before continuing.")
             return
 
-        print_progress_summary(project_dir)
+        print_progress_summary(project_dir, handoff_path=handoff_file)
 
     # Main loop
     iteration = 0
@@ -198,7 +203,7 @@ async def run_autonomous_agent(
             backoff_seconds = 1
             
             logger.info(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
-            print_progress_summary(project_dir)
+            print_progress_summary(project_dir, handoff_path=handoff_file)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
         elif status == "error":
@@ -223,7 +228,7 @@ async def run_autonomous_agent(
     print("  SESSION COMPLETE")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
-    print_progress_summary(project_dir)
+    print_progress_summary(project_dir, handoff_path=handoff_file)
 
     # Print instructions for running the generated application
     print("\n" + "-" * 70)

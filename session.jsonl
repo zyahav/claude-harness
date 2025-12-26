@@ -1,0 +1,4 @@
+{"timestamp": "2025-12-25T23:38:27.652318", "level": "DEBUG", "logger": "root", "message": "Logging initialized. Writing to runs/HARNESS-002/session.jsonl"}
+{"timestamp": "2025-12-25T23:38:27.652435", "level": "INFO", "logger": "root", "message": "Starting new run: HARNESS-002"}
+{"timestamp": "2025-12-25T23:38:27.652493", "level": "INFO", "logger": "root", "message": "\nSuccess! Worktree created at: runs/HARNESS-002"}
+{"timestamp": "2025-12-25T23:38:27.652527", "level": "INFO", "logger": "root", "message": "To run the agent:\n  harness run HARNESS-002 --repo-path /Users/zyahav/Documents/dev/claude-harness"}

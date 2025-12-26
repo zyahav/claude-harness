@@ -163,6 +163,11 @@ def handle_run(args: argparse.Namespace) -> None:
         logging.info(f"Worktree: {project_dir}")
         logging.info(f"Branch: {meta.branch}")
         
+        # Resolve handoff path
+        handoff_path = Path(args.handoff_path).resolve() if args.handoff_path else None
+        if handoff_path:
+            logging.info(f"Handoff: {handoff_path}")
+        
         # Import agent here (lazy load)
         from agent import run_autonomous_agent
         
@@ -172,6 +177,7 @@ def handle_run(args: argparse.Namespace) -> None:
                 model=args.model,
                 max_iterations=args.max_iterations,
                 spec_path=args.spec,
+                handoff_path=handoff_path,
             )
         )
     except FileNotFoundError:
@@ -300,6 +306,7 @@ def main() -> None:
     run_parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use (default: {DEFAULT_MODEL})")
     run_parser.add_argument("--max-iterations", type=int, default=None, help="Limit iterations")
     run_parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC_PATH, help="Path to app spec")
+    run_parser.add_argument("--handoff-path", default=None, help="Path to handoff.json (default: project_dir/handoff.json)")
     run_parser.add_argument("--repo-path", default=".", help="Path to the target repository (for context)")
     run_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     run_parser.set_defaults(func=handle_run)
