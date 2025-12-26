@@ -24,8 +24,33 @@ def get_initializer_prompt() -> str:
 
 
 def get_coding_prompt() -> str:
-    """Load the coding agent prompt."""
+    """Load the coding agent prompt (greenfield mode)."""
     return load_prompt("coding_prompt")
+
+
+def get_brownfield_prompt() -> str:
+    """Load the brownfield agent prompt (existing codebase fixes)."""
+    return load_prompt("brownfield_prompt")
+
+
+def get_prompt_for_mode(mode: str) -> str:
+    """Get the appropriate prompt for the given mode.
+    
+    Args:
+        mode: 'greenfield' or 'brownfield'
+        
+    Returns:
+        The prompt text for the specified mode
+        
+    Raises:
+        ValueError: If mode is not recognized
+    """
+    if mode == "greenfield":
+        return get_coding_prompt()
+    elif mode == "brownfield":
+        return get_brownfield_prompt()
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Use 'greenfield' or 'brownfield'.")
 
 
 def copy_spec_to_project(project_dir: Path, spec_path: Path = None) -> None:

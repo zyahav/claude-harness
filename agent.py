@@ -13,7 +13,7 @@ from typing import Optional
 
 from client import create_client
 from progress import print_session_header, print_progress_summary
-from prompts import get_initializer_prompt, get_coding_prompt, copy_spec_to_project
+from prompts import get_initializer_prompt, get_prompt_for_mode, copy_spec_to_project
 import schema
 
 import logging
@@ -103,6 +103,7 @@ async def run_autonomous_agent(
     model: str,
     max_iterations: Optional[int] = None,
     spec_path: Optional[Path] = None,
+    mode: str = "greenfield",
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -112,12 +113,15 @@ async def run_autonomous_agent(
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         spec_path: Path to the constitution/spec file (None for default)
+        mode: 'greenfield' (new project) or 'brownfield' (existing codebase)
     """
+    mode_label = "GREENFIELD" if mode == "greenfield" else "BROWNFIELD"
     logger.info("\n" + "=" * 70)
-    logger.info("  AUTONOMOUS CODING AGENT DEMO")
+    logger.info(f"  AUTONOMOUS CODING AGENT ({mode_label})")
     logger.info("=" * 70)
     logger.info(f"\nProject directory: {project_dir}")
     logger.info(f"Model: {model}")
+    logger.info(f"Mode: {mode}")
     if max_iterations:
         logger.info(f"Max iterations: {max_iterations}")
     else:
@@ -185,7 +189,7 @@ async def run_autonomous_agent(
             prompt = get_initializer_prompt()
             is_first_run = False  # Only use initializer once
         else:
-            prompt = get_coding_prompt()
+            prompt = get_prompt_for_mode(mode)
 
         # Run session with async context manager
         async with client:
