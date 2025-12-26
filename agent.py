@@ -104,6 +104,7 @@ async def run_autonomous_agent(
     max_iterations: Optional[int] = None,
     spec_path: Optional[Path] = None,
     mode: str = "greenfield",
+    handoff_path: Optional[Path] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -114,6 +115,7 @@ async def run_autonomous_agent(
         max_iterations: Maximum number of iterations (None for unlimited)
         spec_path: Path to the constitution/spec file (None for default)
         mode: 'greenfield' (new project) or 'brownfield' (existing codebase)
+        handoff_path: Path to handoff.json for brownfield mode (None for default: <worktree>/handoff.json)
     """
     mode_label = "GREENFIELD" if mode == "greenfield" else "BROWNFIELD"
     logger.info("\n" + "=" * 70)
@@ -122,6 +124,8 @@ async def run_autonomous_agent(
     logger.info(f"\nProject directory: {project_dir}")
     logger.info(f"Model: {model}")
     logger.info(f"Mode: {mode}")
+    if handoff_path:
+        logger.info(f"Handoff: {handoff_path}")
     if max_iterations:
         logger.info(f"Max iterations: {max_iterations}")
     else:
@@ -136,16 +140,32 @@ async def run_autonomous_agent(
     is_first_run = not tests_file.exists()
 
     if is_first_run:
-        logger.info("Fresh start - will use initializer agent")
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("  NOTE: First session takes 10-20+ minutes!")
-        logger.info("  The agent is generating 200 detailed test cases.")
-        logger.info("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
-        logger.info("=" * 70)
-        logger.info("")
-        # Copy the app spec into the project directory for the agent to read
-        copy_spec_to_project(project_dir, spec_path)
+        if mode == "brownfield" and handoff_path:
+            # Brownfield mode: copy handoff.json from external location
+            import shutil
+            handoff_source = Path(handoff_path).expanduser().resolve()
+            if not handoff_source.exists():
+                logger.error(f"Handoff file not found: {handoff_source}")
+                return
+            shutil.copy(handoff_source, tests_file)
+            logger.info(f"Copied handoff.json from: {handoff_source}")
+            logger.info("Starting brownfield mode - working on existing codebase")
+            is_first_run = False  # Don't use initializer, we have a handoff
+        elif mode == "brownfield":
+            logger.error("Brownfield mode requires --handoff-path to be specified")
+            return
+        else:
+            # Greenfield mode: fresh start
+            logger.info("Fresh start - will use initializer agent")
+            logger.info("")
+            logger.info("=" * 70)
+            logger.info("  NOTE: First session takes 10-20+ minutes!")
+            logger.info("  The agent is generating 200 detailed test cases.")
+            logger.info("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
+            logger.info("=" * 70)
+            logger.info("")
+            # Copy the app spec into the project directory for the agent to read
+            copy_spec_to_project(project_dir, spec_path)
     else:
         logger.info("Continuing existing project")
         
