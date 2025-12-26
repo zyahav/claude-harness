@@ -19,6 +19,24 @@ import os
 import sys
 import time
 from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
+
+# Version: read from installed package or fallback to pyproject.toml
+def get_version() -> str:
+    """Get version from installed package or pyproject.toml."""
+    try:
+        return version("claude-harness")
+    except PackageNotFoundError:
+        # Fallback: read from pyproject.toml (dev mode)
+        pyproject = Path(__file__).parent / "pyproject.toml"
+        if pyproject.exists():
+            import tomllib
+            with open(pyproject, "rb") as f:
+                data = tomllib.load(f)
+                return data.get("project", {}).get("version", "unknown")
+        return "unknown"
+
+__version__ = get_version()
 
 from dotenv import load_dotenv
 
@@ -279,6 +297,7 @@ def main() -> None:
         description="Autonomous Coding Agent CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    parser.add_argument("--version", "-V", action="version", version=f"c-harness {__version__}")
     
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to execute")
 
