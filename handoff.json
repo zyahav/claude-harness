@@ -125,7 +125,7 @@
         "Returns exit code 0 for success, 1 for errors",
         "Integration tests for status output"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["harness.py"],
       "steps": [
         "Add handle_status() function to harness.py",

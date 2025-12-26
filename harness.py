@@ -36,6 +36,10 @@ from datetime import datetime
 # Import doc_check module for Documentation Trust Protocol
 import doc_check
 
+# Import Harness Commander modules
+import state
+import locking
+
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 DEFAULT_SPEC_PATH = Path("prompts/app_spec.txt")
@@ -483,6 +487,95 @@ def handle_clean(args: argparse.Namespace) -> None:
         print(f"Error cleaning up run: {e}")
         sys.exit(1)
 
+
+def handle_status(args: argparse.Namespace) -> None:
+    """Display Harness Commander status line.
+
+    Outputs current mode, focus project, active run, and controller info.
+    Read-only command (acquires no lock).
+    """
+    try:
+        # Load state
+        state_mgr = state.StateManager()
+        current_state = state_mgr.load_state()
+
+        # Check lock status to determine mode
+        lock_mgr = locking.LockManager()
+        lock_info = lock_mgr.read_lock_info()
+
+        # Determine mode and build status line
+        if lock_info and lock_mgr.check_pid_alive(lock_info.pid):
+            # Controller is active
+            mode = "Controller"
+            controller_info = f"PID {lock_info.pid}"
+
+            # Check if we are the controller
+            if lock_info.pid == os.getpid():
+                mode = "Controller (you)"
+
+            # Format active run
+            active_run = None
+            for run in current_state.runs:
+                if run.state == "running":
+                    active_run = run
+                    break
+
+            run_info = active_run.runName if active_run else "none"
+
+            # Format focus project
+            focus_info = "none"
+            if current_state.focusProjectId:
+                focus_project = state_mgr.get_project(current_state.focusProjectId)
+                if focus_project:
+                    focus_info = focus_project.name
+
+            # Format state info
+            state_info = f"{len(current_state.runs)} runs, {len(current_state.tasks)} tasks"
+
+        else:
+            # Observer mode (no active controller)
+            mode = "Observer"
+            controller_info = "none"
+
+            # In observer mode, still show what we can from state
+            active_run = None
+            for run in current_state.runs:
+                if run.state == "running":
+                    active_run = run
+                    break
+
+            run_info = active_run.runName if active_run else "none"
+
+            focus_info = "none"
+            if current_state.focusProjectId:
+                focus_project = state_mgr.get_project(current_state.focusProjectId)
+                if focus_project:
+                    focus_info = focus_project.name
+
+            state_info = f"{len(current_state.runs)} runs, {len(current_state.tasks)} tasks"
+
+            # Add controller info if lock file exists but PID is dead
+            if lock_info:
+                controller_info = f"PID {lock_info.pid} (DEAD)"
+
+        # Print status line
+        status_parts = [
+            f"{mode}",
+            f"focus: {focus_info}",
+            f"run: {run_info}",
+            f"state: {state_info}"
+        ]
+
+        if controller_info != "none":
+            status_parts.append(f"controller: {controller_info}")
+
+        print(" | ".join(status_parts))
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Autonomous Coding Agent CLI",
@@ -547,6 +640,10 @@ def main() -> None:
     clean_parser.add_argument("--repo-path", default=".", help="Path to the target repository (default: .)")
     clean_parser.add_argument("--dry-run", action="store_true", help="Simulate commands without executing them")
     clean_parser.set_defaults(func=handle_clean)
+
+    # STATUS command (Harness Commander)
+    status_parser = subparsers.add_parser("status", help="Display Harness Commander status")
+    status_parser.set_defaults(func=handle_status)
 
     args = parser.parse_args()
     

@@ -58,5 +58,23 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(args.name, 'run-name')
             self.assertTrue(args.force)
 
+    @patch('harness.handle_status')
+    def test_status_command_dispatch(self, mock_status):
+        """Verify 'status' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'status']):
+            main()
+            mock_status.assert_called_once()
+
+    def test_status_command_runs(self):
+        """Test that status command runs without error."""
+        result = subprocess.run(
+            [sys.executable, "harness.py", "status"],
+            capture_output=True,
+            text=True
+        )
+        self.assertEqual(result.returncode, 0)
+        # Should contain key status elements
+        self.assertTrue("focus:" in result.stdout or "Observer" in result.stdout or "Controller" in result.stdout)
+
 if __name__ == "__main__":
     unittest.main()
