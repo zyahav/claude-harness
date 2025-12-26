@@ -19,6 +19,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
 
 from dotenv import load_dotenv
 
@@ -34,6 +35,22 @@ from datetime import datetime
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 DEFAULT_SPEC_PATH = Path("prompts/app_spec.txt")
+
+
+def get_version() -> str:
+    """Get version from package metadata or fallback to reading pyproject.toml."""
+    try:
+        return version("claude-harness")
+    except PackageNotFoundError:
+        # Fallback: read from pyproject.toml directly
+        pyproject_path = Path(__file__).parent / "pyproject.toml"
+        if pyproject_path.exists():
+            import re
+            content = pyproject_path.read_text()
+            match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
+            if match:
+                return match.group(1)
+        return "unknown"
 
 
 class JSONFormatter(logging.Formatter):
@@ -281,6 +298,7 @@ def main() -> None:
         description="Autonomous Coding Agent CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    parser.add_argument("--version", "-V", action="version", version=f"c-harness {get_version()}")
     
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to execute")
 
