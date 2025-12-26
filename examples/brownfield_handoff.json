@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "project": "existing-web-app",
+    "phase": "Bug Fixes Sprint 3",
+    "source": "GitHub Issues #142, #156, #178",
+    "lock": true
+  },
+  "tasks": [
+    {
+      "id": "BUG-142",
+      "category": "security",
+      "title": "Fix SQL injection in search endpoint",
+      "description": "The /api/search endpoint is vulnerable to SQL injection. User input is concatenated directly into the query string. Replace with parameterized queries.",
+      "acceptance_criteria": [
+        "Search endpoint uses parameterized queries",
+        "Input with SQL special characters does not cause errors",
+        "Existing search functionality still works",
+        "No raw SQL string concatenation in codebase"
+      ],
+      "passes": false,
+      "files_expected": ["src/routes/search.py"],
+      "steps": ["Run existing tests", "Test with malicious input: ' OR 1=1 --"]
+    },
+    {
+      "id": "BUG-156",
+      "category": "functional",
+      "title": "Fix pagination returning duplicate items",
+      "description": "When paginating through results, some items appear on multiple pages. Root cause: ORDER BY uses non-unique field. Add secondary sort by id.",
+      "acceptance_criteria": [
+        "No duplicate items across pages",
+        "ORDER BY includes id as tiebreaker",
+        "Pagination still performs well (< 100ms)"
+      ],
+      "passes": false,
+      "files_expected": ["src/utils/pagination.py"],
+      "steps": []
+    },
+    {
+      "id": "BUG-178",
+      "category": "ui",
+      "title": "Fix mobile menu not closing after navigation",
+      "description": "On mobile devices, the hamburger menu stays open after clicking a link. It should close automatically when navigating to a new page.",
+      "acceptance_criteria": [
+        "Menu closes after clicking any nav link",
+        "Menu can still be toggled open/closed manually",
+        "Works on iOS Safari and Android Chrome"
+      ],
+      "passes": false,
+      "files_expected": ["src/components/MobileMenu.tsx"],
+      "steps": []
+    }
+  ]
+}

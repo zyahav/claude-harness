@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "project": "my-project",
+    "phase": "Phase 1",
+    "source": "",
+    "lock": true
+  },
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "category": "functional",
+      "title": "Implement the feature",
+      "description": "Add the new feature as specified.",
+      "acceptance_criteria": [
+        "Feature works as expected",
+        "Tests pass"
+      ],
+      "passes": false,
+      "files_expected": [],
+      "steps": []
+    }
+  ]
+}
