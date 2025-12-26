@@ -12,7 +12,50 @@ A robust CLI harness for running long-running autonomous coding agents using Cla
 ## Quick Links
 
 - **[🤖 Agent Guide](AGENT_GUIDE.md)**: Strictly formatted guide for autonomous agents.
-- **[Architectural Decision Records](docs/)**: detailed design documents.
+- **[📁 Examples](examples/)**: Sample handoff.json files to get started.
+- **[🔧 Brownfield Quick Start](docs/BROWNFIELD_QUICKSTART.md)**: Guide for fixing bugs in existing code.
+- **[Architectural Decision Records](docs/)**: Detailed design documents.
+
+## Modes: Greenfield vs Brownfield
+
+c-harness supports two modes depending on your use case:
+
+| Mode | Use Case | Flag |
+|------|----------|------|
+| **Greenfield** | Building a new app from scratch | `--mode greenfield` (default) |
+| **Brownfield** | Fixing bugs or adding features to existing code | `--mode brownfield` |
+
+### Which mode should I use?
+
+```
+Do you have existing code?
+├── No  → Greenfield (build from app_spec.txt)
+└── Yes → Are you building a major new feature from scratch?
+          ├── Yes → Greenfield
+          └── No  → Brownfield (focused fixes/improvements)
+```
+
+### Greenfield Mode (default)
+
+For building new applications from scratch. The agent expects:
+- `app_spec.txt` — Full application specification
+- `handoff.json` — 50-200+ tasks covering the entire build
+
+```bash
+c-harness start my-app --repo-path ../new-project --mode greenfield
+```
+
+### Brownfield Mode
+
+For fixing bugs or making targeted improvements to existing code. The agent expects:
+- `handoff.json` — 1-10 focused tasks
+- Existing codebase to understand and modify
+
+```bash
+c-harness start BUG-123 --repo-path ../existing-project --mode brownfield
+```
+
+See [Brownfield Quick Start](docs/BROWNFIELD_QUICKSTART.md) for a complete guide.
 
 ## Installation
 
