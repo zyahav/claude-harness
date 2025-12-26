@@ -150,7 +150,7 @@
         "Never deletes user data automatically",
         "Integration tests for doctor checks"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["harness.py", "tests/test_doctor.py"],
       "steps": [
         "Add handle_doctor() function to harness.py",

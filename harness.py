@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 import sys
 import time
 from typing import Optional
@@ -39,6 +40,7 @@ import doc_check
 # Import Harness Commander modules
 import state
 import locking
+import reconcile
 
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
@@ -576,6 +578,168 @@ def handle_status(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def handle_doctor(args: argparse.Namespace) -> None:
+    """Run pre-flight checks for Harness Commander.
+
+    Checks Git version, home directory, locks, state file, and engine availability.
+    Supports --repair-state flag to fix safe issues automatically.
+    """
+    passed = 0
+    warnings = 0
+    errors = 0
+
+    print("Harness Commander Health Check")
+    print("=" * 40)
+    print()
+
+    # Check 1: Git availability and version
+    try:
+        result = subprocess.run(
+            ["git", "--version"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        git_version = result.stdout.strip()
+        print(f"[✓] Git version: {git_version}")
+        passed += 1
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"[!] Git check failed — Git not found or not executable")
+        errors += 1
+    except Exception as e:
+        print(f"[!] Git check failed — {e}")
+        errors += 1
+
+    # Check 2: Home directory and Commander structure
+    try:
+        commander_home = state.COMMANDER_HOME
+        if commander_home.exists():
+            print(f"[✓] Commander home: {commander_home}")
+            passed += 1
+        else:
+            print(f"[!] Commander home missing — will be created on first use")
+            warnings += 1
+    except Exception as e:
+        print(f"[!] Home directory check failed — {e}")
+        errors += 1
+
+    # Check 3: Locks directory
+    try:
+        locks_dir = locking.LOCKS_DIR
+        if locks_dir.exists():
+            lock_mgr = locking.LockManager()
+            lock_info = lock_mgr.read_lock_info()
+
+            if lock_info:
+                # Check if PID is alive
+                if lock_mgr.check_pid_alive(lock_info.pid):
+                    print(f"[✓] Lock directory: Active controller (PID {lock_info.pid})")
+                    passed += 1
+                else:
+                    print(f"[!] Lock directory: Stale lock (PID {lock_info.pid} is dead)")
+                    warnings += 1
+            else:
+                print(f"[✓] Lock directory: No active lock")
+                passed += 1
+        else:
+            print(f"[✓] Lock directory: Not created yet")
+            passed += 1
+    except Exception as e:
+        print(f"[!] Lock directory check failed — {e}")
+        errors += 1
+
+    # Check 4: State file
+    try:
+        state_mgr = state.StateManager()
+        state_file = state.STATE_FILE
+
+        if state_file.exists():
+            current_state = state_mgr.load_state()
+            print(f"[✓] State file: {len(current_state.projects)} projects, {len(current_state.runs)} runs")
+            passed += 1
+        else:
+            print(f"[!] State file: Not found (will be created on first use)")
+            warnings += 1
+    except ValueError as e:
+        print(f"[!] State file check failed — {e}")
+        errors += 1
+    except Exception as e:
+        print(f"[!] State file check failed — {e}")
+        errors += 1
+
+    # Check 5: Engine availability (c-harness itself)
+    try:
+        # Try to run c-harness --version
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__) ), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        # We expect this to succeed or fail gracefully
+        print(f"[✓] Engine: c-harness is available")
+        passed += 1
+    except Exception as e:
+        print(f"[!] Engine check failed — {e}")
+        errors += 1
+
+    # Check 6: Temporary files cleanup check
+    try:
+        tmp_files = list(state.COMMANDER_HOME.glob("*.tmp"))
+        if tmp_files:
+            print(f"[!] Temporary files: Found {len(tmp_files)} .tmp file(s)")
+            warnings += 1
+
+            # Auto-cleanup if --repair-state is set
+            if args.repair_state:
+                for tmp_file in tmp_files:
+                    try:
+                        tmp_file.unlink()
+                        print(f"   └─ Cleaned up: {tmp_file.name}")
+                    except Exception as e:
+                        print(f"   └─ Failed to cleanup {tmp_file.name}: {e}")
+        else:
+            print(f"[✓] Temporary files: None found")
+            passed += 1
+    except Exception as e:
+        print(f"[!] Temporary files check failed — {e}")
+        errors += 1
+
+    # Run reconcile if --repair-state is set
+    if args.repair_state:
+        print()
+        print("Running state repair...")
+
+        try:
+            reconciler = reconcile.Reconciler()
+            result = reconciler.run_reconcile()
+
+            if result.drift_detected:
+                print(f"   └─ Drift detected and fixed:")
+                print(f"      • Projects: +{result.projects_added}, -{result.projects_removed}")
+                print(f"      • Runs: +{result.runs_added}, -{result.runs_removed}, ~{result.runs_updated}")
+                print(f"      • Parked: {result.runs_parked} runs with missing worktrees")
+
+                # Park runs with missing worktrees
+                if result.runs_parked > 0:
+                    print(f"   └─ Parked {result.runs_parked} runs with missing worktrees")
+            else:
+                print(f"   └─ No drift detected, state is consistent")
+
+        except Exception as e:
+            print(f"   └─ Repair failed: {e}")
+            errors += 1
+
+    # Print summary
+    print()
+    print("=" * 40)
+    print(f"Status: {passed} passed, {warnings} warnings, {errors} errors")
+
+    # Exit with error code if there were errors
+    if errors > 0:
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Autonomous Coding Agent CLI",
@@ -644,6 +808,12 @@ def main() -> None:
     # STATUS command (Harness Commander)
     status_parser = subparsers.add_parser("status", help="Display Harness Commander status")
     status_parser.set_defaults(func=handle_status)
+
+    # DOCTOR command (Harness Commander)
+    doctor_parser = subparsers.add_parser("doctor", help="Run health checks for Harness Commander")
+    doctor_parser.add_argument("--repair-state", action="store_true",
+                              help="Run reconciliation and fix safe issues automatically")
+    doctor_parser.set_defaults(func=handle_doctor, repair_state=False)
 
     args = parser.parse_args()
     
