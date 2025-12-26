@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "project": "task-manager-api",
+    "phase": "Phase 1 - Core API",
+    "source": "PRD v1.0",
+    "lock": true
+  },
+  "tasks": [
+    {
+      "id": "API-001",
+      "category": "infrastructure",
+      "title": "Initialize FastAPI project structure",
+      "description": "Set up the base FastAPI project with proper folder structure, requirements.txt, and basic health check endpoint.",
+      "acceptance_criteria": [
+        "Project has src/ folder with main.py",
+        "requirements.txt includes fastapi and uvicorn",
+        "GET /health returns {\"status\": \"ok\"}",
+        "Server starts with uvicorn without errors"
+      ],
+      "passes": false,
+      "files_expected": ["src/main.py", "requirements.txt"],
+      "steps": ["pip install -r requirements.txt", "uvicorn src.main:app", "curl localhost:8000/health"]
+    },
+    {
+      "id": "API-002",
+      "category": "database",
+      "title": "Add SQLite database with SQLAlchemy",
+      "description": "Configure SQLAlchemy with SQLite for local development. Create Task model with id, title, description, completed, created_at fields.",
+      "acceptance_criteria": [
+        "database.py configures SQLAlchemy engine",
+        "Task model exists with all required fields",
+        "Database file is created on first run",
+        "Model can be imported without errors"
+      ],
+      "passes": false,
+      "files_expected": ["src/database.py", "src/models.py"],
+      "steps": []
+    },
+    {
+      "id": "API-003",
+      "category": "api",
+      "title": "Implement CRUD endpoints for tasks",
+      "description": "Create REST endpoints for task management: GET /tasks (list), POST /tasks (create), GET /tasks/{id} (read), PUT /tasks/{id} (update), DELETE /tasks/{id} (delete).",
+      "acceptance_criteria": [
+        "GET /tasks returns list of all tasks",
+        "POST /tasks creates new task and returns it",
+        "GET /tasks/{id} returns single task or 404",
+        "PUT /tasks/{id} updates task or returns 404",
+        "DELETE /tasks/{id} removes task or returns 404"
+      ],
+      "passes": false,
+      "files_expected": ["src/routes/tasks.py", "src/schemas.py"],
+      "steps": []
+    }
+  ]
+}
