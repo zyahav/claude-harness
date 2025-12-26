@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import time
+from typing import Optional
 from pathlib import Path
 from importlib.metadata import version, PackageNotFoundError
 
@@ -235,7 +236,7 @@ def handle_list(args: argparse.Namespace) -> None:
         print(f"{run.name:<20} {run.status:<10} {run.branch:<30} {created}")
 
 
-def get_repo_url(repo_path: Path, branch: str) -> str | None:
+def get_repo_url(repo_path: Path, branch: str) -> Optional[str]:
     """
     Extract and convert git remote URL to a web PR/merge request URL.
 
