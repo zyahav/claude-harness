@@ -235,6 +235,64 @@ def handle_list(args: argparse.Namespace) -> None:
         print(f"{run.name:<20} {run.status:<10} {run.branch:<30} {created}")
 
 
+def get_repo_url(repo_path: Path, branch: str) -> str | None:
+    """
+    Extract and convert git remote URL to a web PR/merge request URL.
+
+    Args:
+        repo_path: Path to the git repository
+        branch: Branch name to create PR for
+
+    Returns:
+        Web URL for creating PR/merge request, or None if unable to determine
+    """
+    try:
+        # Get the remote URL from git config
+        remote_url = lifecycle.run_git(
+            ["config", "--get", "remote.origin.url"],
+            cwd=repo_path
+        )
+
+        if not remote_url:
+            return None
+
+        # Convert SSH URL to HTTPS
+        # git@github.com:user/repo.git -> https://github.com/user/repo
+        # git@gitlab.com:user/repo.git -> https://gitlab.com/user/repo
+        if remote_url.startswith("git@"):
+            # Remove git@ prefix and .git suffix
+            url = remote_url[4:].replace(".git", "")
+            # Replace : with / for the path separator
+            url = url.replace(":", "/")
+            https_url = f"https://{url}"
+        elif remote_url.startswith("git://"):
+            # git://github.com/user/repo.git -> https://github.com/user/repo
+            url = remote_url[6:].replace(".git", "")
+            https_url = f"https://{url}"
+        elif remote_url.startswith("http://"):
+            https_url = remote_url.replace("http://", "https://").replace(".git", "")
+        elif remote_url.startswith("https://"):
+            https_url = remote_url.replace(".git", "")
+        else:
+            # Unknown format, return as-is
+            https_url = remote_url
+
+        # Generate PR/merge request URL based on platform
+        if "github.com" in https_url:
+            # GitHub: /compare/<branch> (expand to create new PR)
+            return f"{https_url}/compare/{branch}"
+        elif "gitlab.com" in https_url:
+            # GitLab: /merge_requests/new?merge_request[source_branch]=<branch>
+            return f"{https_url}/-/merge_requests/new?merge_request[source_branch]={branch}"
+        else:
+            # Unknown platform, just return the base URL
+            return https_url
+
+    except Exception:
+        # If anything goes wrong, return None
+        return None
+
+
 def handle_finish(args: argparse.Namespace) -> None:
     """Finish a run: verify status, check docs, and push branch."""
     if args.dry_run:
@@ -388,8 +446,16 @@ def handle_finish(args: argparse.Namespace) -> None:
             sys.exit(1)
 
         print("\nSuccess! Create your Pull Request here:")
-        # TODO: Detect repo URL from git config for a clickable link
-        print(f"  Branch: {meta.branch}")
+
+        # Try to get a clickable PR/merge request URL
+        repo_path = Path(getattr(meta, "repo_path", "."))
+        pr_url = get_repo_url(repo_path, meta.branch)
+
+        if pr_url:
+            print(f"  {pr_url}")
+        else:
+            # Fallback if we can't determine the URL
+            print(f"  Branch: {meta.branch}")
 
     except FileNotFoundError:
         print(f"Error: Run '{args.name}' not found.")
