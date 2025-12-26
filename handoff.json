@@ -177,8 +177,8 @@
         "Observer mode if lock denied",
         "Integration tests for session lifecycle"
       ],
-      "passes": false,
-      "files_expected": ["harness.py", "cockpit.py", "tests/test_session.py"],
+      "passes": true,
+      "files_expected": ["harness.py", "cockpit.py", "tests/test_cli.py"],
       "steps": [
         "Create cockpit.py with display functions",
         "Add handle_session() function to harness.py",

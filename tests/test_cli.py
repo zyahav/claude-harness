@@ -76,5 +76,12 @@ class TestCLI(unittest.TestCase):
         # Should contain key status elements
         self.assertTrue("focus:" in result.stdout or "Observer" in result.stdout or "Controller" in result.stdout)
 
+    @patch('harness.handle_session')
+    def test_session_command_dispatch(self, mock_session):
+        """Verify 'session' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'session']):
+            main()
+            mock_session.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()

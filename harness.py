@@ -19,6 +19,8 @@ import os
 import subprocess
 import sys
 import time
+import threading
+import signal
 from typing import Optional
 from pathlib import Path
 from importlib.metadata import version, PackageNotFoundError
@@ -41,6 +43,7 @@ import doc_check
 import state
 import locking
 import reconcile
+import cockpit
 
 # Configuration
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
@@ -740,6 +743,158 @@ def handle_doctor(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def handle_session(args: argparse.Namespace) -> None:
+    """Start an interactive Harness Commander session.
+
+    Runs doctor pre-flight, reconciles state, acquires controller lock,
+    and displays the cockpit with next action. Runs heartbeat loop in
+    background. Handles Ctrl+C gracefully for clean exit.
+    """
+    state_mgr = None
+    lock_mgr = None
+    heartbeat_thread = None
+    is_controller = False
+
+    def heartbeat_worker(lock_mgr: locking.LockManager, stop_event: threading.Event):
+        """Background thread that updates heartbeat every 60 seconds.
+
+        Args:
+            lock_mgr: LockManager instance
+            stop_event: Threading event to signal stop
+        """
+        while not stop_event.is_set():
+            try:
+                lock_mgr.update_heartbeat()
+                logger.debug("Heartbeat updated")
+            except Exception as e:
+                logger.error(f"Heartbeat update failed: {e}")
+
+            # Sleep for 60 seconds or until stop event
+            stop_event.wait(60)
+
+    def signal_handler(signum, frame):
+        """Handle SIGINT (Ctrl+C) for clean exit.
+
+        Args:
+            signum: Signal number
+            frame: Current stack frame
+        """
+        nonlocal is_controller
+        logger.info(f"Received signal {signum}, shutting down...")
+
+        if is_controller and lock_mgr:
+            print("\n\nReleasing controller lock...")
+            lock_mgr.release_lock()
+            print("Lock released. Goodbye!")
+
+        sys.exit(0)
+
+    try:
+        # Step 1: Run doctor pre-flight checks
+        print("\nHarness Commander Session")
+        print("=" * 60)
+        print("\nRunning pre-flight checks...")
+        doctor_args = argparse.Namespace(repair_state=False)
+        # Temporarily suppress doctor output in session
+        handle_doctor(doctor_args)
+        print("\n✓ Preflight checks passed")
+
+        # Step 2: Reconcile state with Git reality
+        print("\nReconciling state with Git...")
+        state_mgr = state.StateManager()
+        current_state = state_mgr.load_state()
+
+        reconciler = reconcile.Reconciler(state_mgr)
+        result = reconciler.run_reconcile()
+
+        if result.drift_detected:
+            print(f"  └─ Drift detected and fixed")
+            print(f"      • Projects: +{result.projects_added}, -{result.projects_removed}")
+            print(f"      • Runs: +{result.runs_added}, -{result.runs_removed}, ~{result.runs_updated}")
+            if result.runs_parked > 0:
+                print(f"      • Parked: {result.runs_parked} runs with missing worktrees")
+        else:
+            print(f"  └─ No drift detected")
+
+        # Reload state after reconcile
+        current_state = state_mgr.load_state()
+
+        # Step 3: Acquire controller lock
+        print("\nAcquiring controller lock...")
+        lock_mgr = locking.LockManager()
+
+        success, reason = lock_mgr.acquire_lock()
+
+        if success:
+            # Controller mode
+            is_controller = True
+            session_id = lock_mgr.sessionId
+            print(f"  ✓ Controller mode (session: {session_id[:8]})")
+
+            # Set up signal handler for clean exit
+            signal.signal(signal.SIGINT, signal_handler)
+
+            # Start heartbeat thread
+            stop_heartbeat = threading.Event()
+            heartbeat_thread = threading.Thread(
+                target=heartbeat_worker,
+                args=(lock_mgr, stop_heartbeat),
+                daemon=True
+            )
+            heartbeat_thread.start()
+            logger.debug("Heartbeat thread started")
+
+        else:
+            # Observer mode
+            is_controller = False
+            lock_info = lock_mgr.read_lock_info()
+            if lock_info:
+                print(f"  ! Lock held by PID {lock_info.pid}")
+            else:
+                print(f"  ! Lock acquisition failed: {reason}")
+            print(f"  → Entering observer mode (read-only)")
+
+        # Step 4: Display cockpit
+        cockpit.display_cockpit(current_state, state_mgr)
+
+        # Step 5: Display next action (only in controller mode)
+        if is_controller:
+            cockpit.display_next_action(current_state, state_mgr)
+
+        # Step 6: Keep session alive (controller mode)
+        if is_controller:
+            print("\n" + "=" * 60)
+            print("Session active. Press Ctrl+C to exit.")
+            print("=" * 60)
+
+            # Keep main thread alive
+            try:
+                while heartbeat_thread and heartbeat_thread.is_alive():
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                # This shouldn't happen due to signal handler, but just in case
+                logger.info("KeyboardInterrupt caught")
+
+        else:
+            # Observer mode - display message and exit
+            cockpit.display_observer_mode()
+            sys.exit(0)
+
+    except Exception as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        logger.exception("Session failed")
+
+        # Clean up lock if we acquired it
+        if is_controller and lock_mgr:
+            try:
+                lock_mgr.release_lock()
+                print("Lock released due to error")
+            except Exception as e2:
+                logger.error(f"Failed to release lock: {e2}")
+
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Autonomous Coding Agent CLI",
@@ -814,6 +969,10 @@ def main() -> None:
     doctor_parser.add_argument("--repair-state", action="store_true",
                               help="Run reconciliation and fix safe issues automatically")
     doctor_parser.set_defaults(func=handle_doctor, repair_state=False)
+
+    # SESSION command (Harness Commander)
+    session_parser = subparsers.add_parser("session", help="Start interactive Harness Commander session")
+    session_parser.set_defaults(func=handle_session)
 
     args = parser.parse_args()
     
