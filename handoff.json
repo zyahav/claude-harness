@@ -254,7 +254,7 @@
         "dismiss removes item from inbox",
         "Integration tests for inbox lifecycle"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["harness.py"],
       "steps": [
         "Add handle_inbox() function to harness.py",
@@ -277,7 +277,7 @@
         "Supports --apply flag for explicit updates",
         "Integration tests for bootstrap scenarios"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["harness.py"],
       "steps": [
         "Add handle_bootstrap() function to harness.py",

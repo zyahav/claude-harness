@@ -130,5 +130,57 @@ class TestCLI(unittest.TestCase):
         # Should display focus information or message about no focus
         self.assertTrue("focus" in result.stdout.lower() or "No focus project set" in result.stdout)
 
+    @patch('harness.handle_inbox')
+    def test_inbox_command_dispatch(self, mock_inbox):
+        """Verify 'inbox' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'inbox', 'test idea']):
+            main()
+            mock_inbox.assert_called_once()
+            args = mock_inbox.call_args[0][0]
+            self.assertEqual(args.text, 'test idea')
+
+    @patch('harness.handle_inbox')
+    def test_inbox_list_command_dispatch(self, mock_inbox):
+        """Verify 'inbox --list' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'inbox', '--list']):
+            main()
+            mock_inbox.assert_called_once()
+            args = mock_inbox.call_args[0][0]
+            self.assertTrue(args.list_action)
+
+    @patch('harness.handle_inbox')
+    def test_inbox_promote_command_dispatch(self, mock_inbox):
+        """Verify 'inbox --promote' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'inbox', '--promote', 'test-id']):
+            main()
+            mock_inbox.assert_called_once()
+            args = mock_inbox.call_args[0][0]
+            self.assertEqual(args.promote, 'test-id')
+
+    @patch('harness.handle_inbox')
+    def test_inbox_dismiss_command_dispatch(self, mock_inbox):
+        """Verify 'inbox --dismiss' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'inbox', '--dismiss', 'test-id']):
+            main()
+            mock_inbox.assert_called_once()
+            args = mock_inbox.call_args[0][0]
+            self.assertEqual(args.dismiss, 'test-id')
+
+    @patch('harness.handle_bootstrap')
+    def test_bootstrap_command_dispatch(self, mock_bootstrap):
+        """Verify 'bootstrap' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'bootstrap']):
+            main()
+            mock_bootstrap.assert_called_once()
+
+    @patch('harness.handle_bootstrap')
+    def test_bootstrap_apply_command_dispatch(self, mock_bootstrap):
+        """Verify 'bootstrap --apply' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'bootstrap', '--apply']):
+            main()
+            mock_bootstrap.assert_called_once()
+            args = mock_bootstrap.call_args[0][0]
+            self.assertTrue(args.apply)
+
 if __name__ == "__main__":
     unittest.main()

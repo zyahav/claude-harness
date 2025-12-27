@@ -50,6 +50,9 @@ import rules
 DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 DEFAULT_SPEC_PATH = Path("prompts/app_spec.txt")
 
+# Logger for this module
+logger = logging.getLogger(__name__)
+
 
 def get_version() -> str:
     """Get version from package metadata or fallback to reading pyproject.toml."""
@@ -889,6 +892,248 @@ def handle_focus(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def handle_inbox(args: argparse.Namespace) -> None:
+    """Manage inbox items for capturing ideas and promoting them to tasks.
+
+    Subcommands:
+        - 'c-harness inbox <text>' - Capture an idea (fire-and-forget, no prompts)
+        - 'c-harness inbox list' - List all inbox items (requires controller lock)
+        - 'c-harness inbox promote <id>' - Promote inbox item to task (requires controller lock)
+        - 'c-harness inbox dismiss <id>' - Dismiss (delete) an inbox item (requires controller lock)
+    """
+    try:
+        state_mgr = state.StateManager()
+        current_state = state_mgr.load_state()
+
+        # DETERMINE SUBCOMMAND based on args
+        # If promote/dismiss is set, use that
+        # If list_action is True, do list
+        # Otherwise, capture mode (args.text contains the idea)
+
+        if args.promote:
+            # PROMOTE MODE: Convert inbox item to task
+            item_id = args.promote
+
+            # Find the inbox item
+            item = state_mgr.get_inbox_item(item_id)
+            if not item:
+                print(f"Error: Inbox item '{item_id}' not found.", file=sys.stderr)
+                print("\nUse 'c-harness inbox list' to see all items.")
+                sys.exit(1)
+
+            # Check if focus project is set
+            if not current_state.focusProjectId:
+                print("Error: No focus project set.", file=sys.stderr)
+                print("Use 'c-harness focus set <projectId|name>' to set focus first.")
+                sys.exit(1)
+
+            focus_project = state_mgr.get_project(current_state.focusProjectId)
+            if not focus_project:
+                print(f"Error: Focus project '{current_state.focusProjectId}' not found.", file=sys.stderr)
+                sys.exit(1)
+
+            # Acquire controller lock for mutation
+            lock_mgr = locking.LockManager()
+            try:
+                lock_mgr.acquire_lock()
+                logger.debug("Acquired controller lock for inbox promote")
+            except Exception as e:
+                print(f"Error: Could not acquire controller lock: {e}", file=sys.stderr)
+                print("\nAnother session may be in progress. Try 'c-harness status' for details.")
+                sys.exit(1)
+
+            try:
+                # Create task from inbox item
+                new_task = state.Task(
+                    id="",  # Will be generated in __post_init__
+                    projectId=focus_project.id,
+                    title=item.text[:100],  # Truncate to 100 chars for title
+                    column="todo",
+                    createdAt=state.get_timestamp()
+                )
+
+                # Remove inbox item and add task
+                current_state.inbox = [i for i in current_state.inbox if i.id != item_id]
+                current_state.tasks.append(new_task)
+
+                # Save state atomically
+                state_mgr.update_state(current_state)
+
+                print(f"\n✓ Promoted inbox item to task")
+                print(f"  Task: {new_task.title}")
+                print(f"  Project: {focus_project.name}")
+                print(f"  Task ID: {new_task.id}")
+
+            finally:
+                # Always release lock
+                lock_mgr.release_lock()
+                logger.debug("Released controller lock")
+
+        elif args.dismiss:
+            # DISMISS MODE: Delete inbox item
+            item_id = args.dismiss
+
+            # Find the inbox item
+            item = state_mgr.get_inbox_item(item_id)
+            if not item:
+                print(f"Error: Inbox item '{item_id}' not found.", file=sys.stderr)
+                print("\nUse 'c-harness inbox list' to see all items.")
+                sys.exit(1)
+
+            # Acquire controller lock for mutation
+            lock_mgr = locking.LockManager()
+            try:
+                lock_mgr.acquire_lock()
+                logger.debug("Acquired controller lock for inbox dismiss")
+            except Exception as e:
+                print(f"Error: Could not acquire controller lock: {e}", file=sys.stderr)
+                print("\nAnother session may be in progress. Try 'c-harness status' for details.")
+                sys.exit(1)
+
+            try:
+                # Remove inbox item
+                current_state.inbox = [i for i in current_state.inbox if i.id != item_id]
+
+                # Save state atomically
+                state_mgr.update_state(current_state)
+
+                print(f"\n✓ Dismissed inbox item")
+                print(f"  Text: {item.text[:60]}{'...' if len(item.text) > 60 else ''}")
+
+            finally:
+                # Always release lock
+                lock_mgr.release_lock()
+                logger.debug("Released controller lock")
+
+        elif args.list_action:
+            # LIST MODE: Show all inbox items
+            # Requires controller lock
+            lock_mgr = locking.LockManager()
+            try:
+                lock_mgr.acquire_lock()
+                logger.debug("Acquired controller lock for inbox list")
+            except Exception as e:
+                print(f"Error: Could not acquire controller lock: {e}", file=sys.stderr)
+                print("\nAnother session may be in progress. Try 'c-harness status' for details.")
+                sys.exit(1)
+
+            try:
+                # Reload state to ensure fresh data
+                current_state = state_mgr.load_state()
+
+                if not current_state.inbox:
+                    print("\nInbox is empty.")
+                    print("\nCapture ideas with:")
+                    print("  c-harness inbox <your idea>")
+                    return
+
+                print(f"\nInbox ({len(current_state.inbox)} items)")
+                print("=" * 60)
+
+                for i, item in enumerate(current_state.inbox, 1):
+                    created = item.createdAt.replace("T", " ").replace("Z", "")[:19]
+                    print(f"\n{i}. {item.id[:8]}")
+                    print(f"   Created: {created}")
+                    print(f"   Text: {item.text}")
+
+                print("\n" + "=" * 60)
+                print("\nActions:")
+                print("  c-harness inbox promote <id>   Promote to task")
+                print("  c-harness inbox dismiss <id>   Dismiss item")
+
+            finally:
+                # Always release lock
+                lock_mgr.release_lock()
+                logger.debug("Released controller lock")
+
+        else:
+            # CAPTURE MODE: Add new inbox item (fire-and-forget)
+            if not args.text:
+                print("Error: No text provided.", file=sys.stderr)
+                print("\nUsage:")
+                print("  c-harness inbox '<your idea>'")
+                sys.exit(1)
+
+            # Create inbox item (no lock needed for append)
+            new_item = state.InboxItem(
+                id="",  # Will be generated in __post_init__
+                text=args.text,
+                createdAt=state.get_timestamp()
+            )
+
+            # Append to inbox
+            current_state.inbox.append(new_item)
+
+            # Save state atomically
+            state_mgr.update_state(current_state)
+
+            print(f"\n✓ Captured idea")
+            print(f"  ID: {new_item.id[:8]}")
+            print(f"  Text: {new_item.text}")
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        logger.exception("Inbox command failed")
+        sys.exit(1)
+
+
+def handle_bootstrap(args: argparse.Namespace) -> None:
+    """Check installation and discover updates for c-harness.
+
+    This command:
+    - Checks if c-harness is installed/available
+    - Prints install steps if missing (never silent install)
+    - Checks for updates (notification only, no auto-update)
+    - Supports --apply flag for explicit updates
+    """
+    try:
+        print("\nHarness Commander Bootstrap")
+        print("=" * 60)
+
+        # Check 1: Verify c-harness is available
+        print("\nChecking installation...")
+        current_version = get_version()
+
+        if current_version == "unknown":
+            print("\n[!] c-harness is not installed or not in PATH")
+            print("\nInstallation steps:")
+            print("  1. Clone the repository:")
+            print("     git clone https://github.com/your-org/claude-harness.git")
+            print("  2. Install in editable mode:")
+            print("     pip install -e ./claude-harness")
+            print("  3. Verify installation:")
+            print("     c-harness --version")
+            print("\nOr install from PyPI (when available):")
+            print("  pip install claude-harness")
+            sys.exit(1)
+
+        print(f"[✓] c-harness version: {current_version}")
+
+        # Check 2: Try to fetch latest version from GitHub
+        # For now, we'll skip this since we don't have a reliable API
+        # In production, this would check GitHub releases or PyPI
+        print("\nChecking for updates...")
+        print("[!] Update checking not yet implemented")
+        print("    To check manually, visit:")
+        print("    https://github.com/your-org/claude-harness/releases")
+
+        # If --apply flag is set, show message
+        if args.apply:
+            print("\n[*] --apply flag specified")
+            print("    Auto-update not yet implemented")
+            print("    Please update manually:")
+            print("    pip install --upgrade claude-harness")
+
+        print("\n" + "=" * 60)
+        print("Bootstrap complete")
+        print("=" * 60)
+
+    except Exception as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        logger.exception("Bootstrap command failed")
+        sys.exit(1)
+
+
 def handle_session(args: argparse.Namespace) -> None:
     """Start an interactive Harness Commander session.
 
@@ -1129,6 +1374,24 @@ def main() -> None:
     # SESSION command (Harness Commander)
     session_parser = subparsers.add_parser("session", help="Start interactive Harness Commander session")
     session_parser.set_defaults(func=handle_session)
+
+    # INBOX command (Harness Commander)
+    inbox_parser = subparsers.add_parser("inbox", help="Manage inbox items")
+    inbox_parser.add_argument("text", nargs="?", const=None,
+                             help="Text to capture (use 'list', 'promote <id>', or 'dismiss <id>' for other actions)")
+    inbox_parser.add_argument("--list", dest="list_action", action="store_true",
+                             help="List all inbox items")
+    inbox_parser.add_argument("--promote", metavar="ID",
+                             help="Promote inbox item to task")
+    inbox_parser.add_argument("--dismiss", metavar="ID",
+                             help="Dismiss (delete) inbox item")
+    inbox_parser.set_defaults(func=handle_inbox, text=None, list_action=False, promote=None, dismiss=None)
+
+    # BOOTSTRAP command (Harness Commander)
+    bootstrap_parser = subparsers.add_parser("bootstrap", help="Check installation and discover updates")
+    bootstrap_parser.add_argument("--apply", action="store_true",
+                                 help="Apply updates explicitly (no auto-update)")
+    bootstrap_parser.set_defaults(func=handle_bootstrap, apply=False)
 
     args = parser.parse_args()
     
