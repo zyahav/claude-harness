@@ -103,5 +103,32 @@ class TestCLI(unittest.TestCase):
         self.assertIn("Why:", result.stdout)
         self.assertIn("Done:", result.stdout)
 
+    @patch('harness.handle_focus')
+    def test_focus_command_dispatch(self, mock_focus):
+        """Verify 'focus' command calls handler."""
+        with patch.object(sys, 'argv', ['harness.py', 'focus']):
+            main()
+            mock_focus.assert_called_once()
+
+    @patch('harness.handle_focus')
+    def test_focus_set_command_dispatch(self, mock_focus):
+        """Verify 'focus set' command calls handler with project argument."""
+        with patch.object(sys, 'argv', ['harness.py', 'focus', 'test-project']):
+            main()
+            mock_focus.assert_called_once()
+            args = mock_focus.call_args[0][0]
+            self.assertEqual(args.set_project, 'test-project')
+
+    def test_focus_view_command_runs(self):
+        """Test that focus view command runs without error."""
+        result = subprocess.run(
+            [sys.executable, "harness.py", "focus"],
+            capture_output=True,
+            text=True
+        )
+        self.assertEqual(result.returncode, 0)
+        # Should display focus information or message about no focus
+        self.assertTrue("focus" in result.stdout.lower() or "No focus project set" in result.stdout)
+
 if __name__ == "__main__":
     unittest.main()

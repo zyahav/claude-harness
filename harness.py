@@ -779,6 +779,116 @@ def handle_next(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def handle_focus(args: argparse.Namespace) -> None:
+    """Set or view the focus project.
+
+    'focus set <projectId|name>' - Set focus project (requires controller lock)
+    'focus' - View current focus project (read-only, no lock)
+    """
+    try:
+        # Load state
+        state_mgr = state.StateManager()
+        current_state = state_mgr.load_state()
+
+        # VIEW MODE: Just display current focus
+        if not args.set_project:
+            if current_state.focusProjectId:
+                project = state_mgr.get_project(current_state.focusProjectId)
+                if project:
+                    print(f"\nCurrent focus project:")
+                    print(f"  ID: {project.id}")
+                    print(f"  Name: {project.name}")
+                    print(f"  Path: {project.repoPath}")
+                    print(f"  Status: {project.status}")
+                else:
+                    print(f"\nCurrent focus ID: {current_state.focusProjectId}")
+                    print(f"  (Project not found in state)")
+            else:
+                print("\nNo focus project set.")
+                print("Use 'c-harness focus set <projectId|name>' to set focus.")
+            return
+
+        # SET MODE: Change focus project (requires lock)
+        project_identifier = args.set_project
+
+        # Run reconcile first to ensure state is up-to-date
+        print("\nReconciling state with Git...")
+        reconciler = reconcile.Reconciler(state_mgr)
+        result = reconciler.run_reconcile()
+        if result.drift_detected:
+            print("  └─ State reconciled")
+        # Reload state after reconcile
+        current_state = state_mgr.load_state()
+
+        # Find project by ID or name
+        target_project = None
+        for project in current_state.projects:
+            if project.id == project_identifier or project.name == project_identifier:
+                target_project = project
+                break
+
+        if not target_project:
+            print(f"Error: Project '{project_identifier}' not found.", file=sys.stderr)
+            print("\nAvailable projects:")
+            if current_state.projects:
+                for p in current_state.projects:
+                    print(f"  - {p.name} (ID: {p.id})")
+            else:
+                print("  (No projects registered)")
+            sys.exit(1)
+
+        # Check if already focused on this project
+        if current_state.focusProjectId == target_project.id:
+            print(f"\nAlready focused on: {target_project.name}")
+            print(f"  ID: {target_project.id}")
+            print(f"  Path: {target_project.repoPath}")
+            return
+
+        # Require confirmation if switching from current focus
+        if current_state.focusProjectId:
+            current_project = state_mgr.get_project(current_state.focusProjectId)
+            if current_project:
+                print(f"\nCurrent focus: {current_project.name}")
+                print(f"New focus: {target_project.name}")
+                print("\nThis will change your focus project.")
+
+                # Prompt for confirmation
+                response = input("Continue? (y/N) ").strip().lower()
+                if response not in ["y", "yes"]:
+                    print("Focus change cancelled.")
+                    return
+
+        # Acquire controller lock for mutation
+        lock_mgr = locking.LockManager()
+        try:
+            lock_mgr.acquire_lock()
+            print("  └─ Acquired controller lock")
+        except Exception as e:
+            print(f"Error: Could not acquire controller lock: {e}", file=sys.stderr)
+            print("\nAnother session may be in progress. Try 'c-harness status' for details.")
+            sys.exit(1)
+
+        try:
+            # Update focus project ID atomically
+            current_state.focusProjectId = target_project.id
+            state_mgr.update_state(current_state)
+
+            print(f"\n✓ Focus updated")
+            print(f"  Project: {target_project.name}")
+            print(f"  ID: {target_project.id}")
+            print(f"  Path: {target_project.repoPath}")
+
+        finally:
+            # Always release lock
+            lock_mgr.release_lock()
+            print("  └─ Released controller lock")
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        logger.exception("Focus command failed")
+        sys.exit(1)
+
+
 def handle_session(args: argparse.Namespace) -> None:
     """Start an interactive Harness Commander session.
 
@@ -1009,6 +1119,12 @@ def main() -> None:
     # NEXT command (Harness Commander)
     next_parser = subparsers.add_parser("next", help="Show next recommended action")
     next_parser.set_defaults(func=handle_next)
+
+    # FOCUS command (Harness Commander)
+    focus_parser = subparsers.add_parser("focus", help="Set or view the focus project")
+    focus_parser.add_argument("set_project", nargs="?", const=None,
+                             help="Project ID or name to set as focus (omits to view current focus)")
+    focus_parser.set_defaults(func=handle_focus, set_project=None)
 
     # SESSION command (Harness Commander)
     session_parser = subparsers.add_parser("session", help="Start interactive Harness Commander session")

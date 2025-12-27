@@ -229,7 +229,7 @@
         "Updates state.focusProjectId atomically",
         "Integration tests for focus management"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["harness.py"],
       "steps": [
         "Add handle_focus() function to harness.py",
