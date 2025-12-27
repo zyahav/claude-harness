@@ -104,3 +104,184 @@ Your `handoff.json` MUST strictly adhere to this format.
 - **Invalid `category`**: Use ONLY the list provided above.
 - **Missing `acceptance_criteria`**: Must be a non-empty list of strings.
 - **`passes` is not boolean**: Must be `true` or `false` (literal).
+
+## 5. Harness Commander (Advanced Workflow)
+
+Harness Commander is an ADHD-first control plane that helps manage multiple concurrent projects and tasks. It provides state management, reconciliation, and intelligent next-action recommendations.
+
+### When to Use Harness Commander
+
+Use Commander when:
+- Working across multiple repositories simultaneously
+- Managing complex task dependencies
+- Need help prioritizing what to work on next
+- Want to minimize context switching between projects
+
+### Commander Architecture
+
+- **`state.py`**: Atomic state management with crash recovery
+- **`locking.py`**: Concurrency control (Controller/Observer mode)
+- **`reconcile.py`**: Git-first synchronization (prevents split-brain)
+- **`cockpit.py`**: Interactive display of current state
+- **`rules.py`**: Rule engine for computing next actions
+
+### Core Concepts
+
+#### 1. State Management
+
+Commander maintains persistent state in `~/.cloud-harness/state.json`:
+- **Projects**: Repositories you're working on
+- **Runs**: Individual worktrees/branches
+- **Tasks**: Work items linked to projects
+- **Inbox**: Quick-capture ideas for later processing
+- **Focus Project**: The currently active project
+
+#### 2. Controller vs Observer Mode
+
+- **Controller Mode**: Exclusive write access (one session at a time)
+- **Observer Mode**: Read-only access when another controller is active
+
+The lock system prevents concurrent mutations using:
+- PID liveness checks (is the process still running?)
+- Heartbeat freshness checks (updated every 60s)
+- Atomic file locking (flock/O_EXCL)
+
+#### 3. Git-First Reconciliation
+
+Commander automatically syncs state with Git reality:
+- Runs `git worktree list` to detect missing worktrees
+- Parks runs with missing worktrees (state: "parked")
+- Updates branch names if they've changed
+- Refuses mutations on dirty working trees
+
+**Key Principle**: Git is the source of truth. State is derived, not authoritative.
+
+### Commander Workflows
+
+#### Initial Setup
+
+```bash
+# Run pre-flight checks
+c-harness doctor
+
+# Start interactive session
+c-harness session
+```
+
+#### Daily Workflow
+
+```bash
+# 1. Check status
+c-harness status
+# Output: Controller | focus: my-project | run: BUG-123 | state: 5 runs, 12 tasks
+
+# 2. See next action
+c-harness next
+# Output: Next Action, Why, Done Criteria
+
+# 3. Start focused work session
+c-harness session
+# Displays cockpit with all your projects, runs, and tasks
+```
+
+#### Quick Capture (Inbox)
+
+```bash
+# Capture idea without interrupting work
+c-harness inbox "Remember to add error handling to API"
+
+# Review and process inbox later
+c-harness inbox --list
+c-harness inbox --promote <id>  # Convert to task
+```
+
+#### Focus Management
+
+```bash
+# View current focus
+c-harness focus
+
+# Switch focus project (requires confirmation)
+c-harness focus set <project-id>
+```
+
+### Example Agent Workflow with Commander
+
+As an autonomous agent, you should integrate Commander into your workflow:
+
+1. **Session Start**: Run `c-harness session` to get controller lock
+2. **Read Cockpit**: Understand current state and priorities
+3. **Follow Next Action**: Use `c-harness next` to determine what to work on
+4. **Execute Work**: Use standard `c-harness start/run/finish` commands
+5. **Auto-Reconcile**: Commander syncs state with Git after each operation
+6. **Capture Ideas**: Use `c-harness inbox` for thoughts that don't fit current task
+7. **Session End**: Ctrl+C releases controller lock automatically
+
+### Commander State Schema
+
+State is stored in `~/.cloud-harness/state.json`:
+
+```json
+{
+  "focusProjectId": "uuid-1234",
+  "projects": [
+    {
+      "id": "uuid",
+      "name": "my-app",
+      "repoPath": "/path/to/repo",
+      "status": "active",
+      "lastTouchedAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "runs": [
+    {
+      "id": "uuid",
+      "projectId": "uuid",
+      "runName": "BUG-123",
+      "state": "running",
+      "worktreePath": "/path/to/worktree",
+      "branchName": "run/BUG-123",
+      "lastTouchedAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "uuid",
+      "projectId": "uuid",
+      "title": "Fix login bug",
+      "column": "doing",
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "inbox": [
+    {
+      "id": "uuid",
+      "text": "Add unit tests for auth module",
+      "createdAt": "2024-01-15T10:30:00Z",
+      "triageStatus": null
+    }
+  ]
+}
+```
+
+### Important: Commander vs Core Harness
+
+- **Core Harness** (`start/run/finish`): Manages individual agent runs
+- **Commander** (`session/status/next`): Orchestrates across multiple runs/projects
+
+You can use core harness commands WITHOUT Commander, but Commander adds:
+- Multi-project coordination
+- Persistent state tracking
+- Intelligent next-action recommendations
+- Quick capture inbox system
+- Concurrency safety for multiple sessions
+
+### Phase 1 Limitations
+
+Current Commander implementation (Phase 1):
+- ✅ Git-based state management
+- ✅ Local concurrency control
+- ✅ Interactive cockpit display
+- ✅ Rule engine for next actions
+- ⏳ No cloud sync (Convex integration planned for Phase 2)
+- ⏳ No external task integrations (Jira, GitHub Issues, etc.)

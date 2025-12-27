@@ -328,7 +328,7 @@
         "Phase 1 limitations documented (no Convex yet)",
         "Doc check passes"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["README.md", "AGENT_GUIDE.md"],
       "steps": [
         "Update README.md with Phase 1 features",

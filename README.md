@@ -149,6 +149,90 @@ Removes the worktree and optionally deletes the local branch.
 c-harness clean my-feature-run --delete-branch
 ```
 
+## Harness Commander (ADHD-First Control Plane)
+
+Harness Commander is an additional layer on top of the core harness functionality, designed to help manage multiple concurrent projects and tasks. It provides state management, reconciliation, and an ADHD-friendly interface for tracking work across multiple repositories.
+
+### Key Features
+
+- **State Management**: Track projects, runs, and tasks across all your work
+- **Git-First Reconciliation**: Automatically syncs state with Git reality
+- **Concurrency Control**: Controller/Observer mode with lock management
+- **Interactive Cockpit**: Visual overview of your current focus and next actions
+- **Inbox System**: Quick capture of ideas without context switching
+- **Rule Engine**: Computes the next best action automatically
+
+### Commander Commands
+
+#### Health Check & Setup
+
+```bash
+# Run pre-flight checks
+c-harness doctor
+
+# Run checks and auto-fix safe issues
+c-harness doctor --repair-state
+
+# Check installation and updates
+c-harness bootstrap
+```
+
+#### Session Management
+
+```bash
+# Start interactive session (recommended)
+c-harness session
+
+# Show current status
+c-harness status
+
+# Show next recommended action
+c-harness next
+```
+
+#### Focus & Project Management
+
+```bash
+# View current focus project
+c-harness focus
+
+# Set focus project
+c-harness focus set <project-id-or-name>
+```
+
+#### Inbox (Quick Capture)
+
+```bash
+# Capture an idea (fire-and-forget)
+c-harness inbox "Add dark mode to dashboard"
+
+# List all inbox items
+c-harness inbox --list
+
+# Promote inbox item to task
+c-harness inbox --promote <item-id>
+
+# Dismiss (delete) inbox item
+c-harness inbox --dismiss <item-id>
+```
+
+### Commander Workflow
+
+1. **Start Session**: `c-harness session` runs pre-flight checks and acquires controller lock
+2. **View Cockpit**: See focus project, active runs, blocked items, and inbox
+3. **Follow Next Action**: Commander tells you exactly what to work on next
+4. **Capture Ideas**: Use `c-harness inbox` to quickly capture thoughts without interrupting work
+5. **Auto-Reconcile**: Commander automatically syncs with Git reality (no manual state updates)
+
+### Phase 1 Limitations
+
+Current implementation (Phase 1) focuses on:
+- ✅ Git-based project management
+- ✅ Local state synchronization
+- ✅ Interactive cockpit display
+- ✅ Quick capture inbox system
+- ⏳ Convex integration (planned for Phase 2)
+
 ## 🗺️ Repository Map (Agent-Ready)
 
 To ensure seamless integration for both humans and AI agents, here is the architectural map:
