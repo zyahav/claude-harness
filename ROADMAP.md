@@ -17,9 +17,11 @@ This document outlines the future development phases and planned improvements fo
     - *Target behavior:* Raise `ValidationError` if meta is missing (fail fast).
     - *Note:* Legacy list-based handoff files will continue to be supported.
 
-## Phase 6: Harness Commander (Approved)
+## Phase 6: Harness Commander (Complete ✅)
 **Goal:** Implement the "ADHD-First" Control Plane.
-- [ ] **Implement `c-harness session`:** The interactive "Cockpit" UI.
-- [ ] **Implement Registry & Locking:** Single-controller enforcement via `~/.cloud-harness/locks`.
-- [ ] **Implement "Reconcile Reality":** Logic to sync the registry with Git state.
-- [ ] **See Specification:** `docs/HARNESS_COMMANDER_SPEC.md` for full implementation details.
+- [x] **Implement `c-harness session`:** The interactive "Cockpit" UI.
+- [x] **Implement Registry & Locking:** Single-controller enforcement via `~/.cloud-harness/locks`.
+- [x] **Implement "Reconcile Reality":** Logic to sync the registry with Git state.
+- [x] **Comprehensive Testing:** Unit and integration tests for all Commander components.
+- [x] **Documentation:** README and AGENT_GUIDE updated with Commander workflows.
+- **See Specification:** `docs/final_handoff_v_4_harness_commander.md` for full implementation details.
