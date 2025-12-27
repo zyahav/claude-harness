@@ -303,7 +303,7 @@
         "Tests for state atomic writes and crash recovery",
         "All tests pass"
       ],
-      "passes": false,
+      "passes": true,
       "files_expected": ["tests/test_integration.py"],
       "steps": [
         "Create test_integration.py",
