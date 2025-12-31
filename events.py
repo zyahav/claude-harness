@@ -9,7 +9,7 @@ import json
 import uuid
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, Union, Dict
 from datetime import datetime
 from enum import Enum
 import logging
@@ -81,7 +81,7 @@ class EventLogger:
         COMMANDER_HOME.mkdir(parents=True, exist_ok=True)
 
     def log_event(
-        self, event_type: str | EventType, data: dict[str, Any]
+        self, event_type: Union[str, EventType], data: Dict[str, Any]
     ) -> None:
         """Log an event to the append-only log.
 
