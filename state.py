@@ -79,7 +79,7 @@ class Project:
     name: str
     repoPath: str
     status: str
-    lastTouchedAt: str
+    lastTouchedAt: str = field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
 
     def __post_init__(self):
         """Ensure ID is set."""
