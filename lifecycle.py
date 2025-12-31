@@ -29,6 +29,7 @@ class RunMetadata:
     project_dir: str
     repo_path: str  # Added: path to the target repository
     archon: Optional[dict] = None  # Archon integration data (project_id, task_ids)
+    handoff: Optional[str] = None  # Relative path to handoff.json in run dir
 
 
 def run_git(cmd: List[str], cwd: Optional[Path] = None, dry_run: bool = False) -> str:
@@ -110,6 +111,16 @@ def create_run(
              raise FileExistsError(f"Branch {branch_name} already exists. Choose a different run name.")
         raise e
         
+    # Copy handoff.json if provided
+    if handoff_path and not dry_run:
+        handoff_source = Path(handoff_path)
+        if handoff_source.exists():
+            handoff_dest = run_dir / "handoff.json"
+            shutil.copy(handoff_source, handoff_dest)
+            print(f"  Handoff:     {handoff_dest}")
+        else:
+            print(f"  Warning: Handoff file not found: {handoff_path}")
+    
     # Create metadata
     if not dry_run:
         meta = RunMetadata(
@@ -118,7 +129,8 @@ def create_run(
             created_at=time.time(),
             status="active",
             project_dir=str(run_dir.resolve()),
-            repo_path=str(repo_path)
+            repo_path=str(repo_path),
+            handoff="handoff.json" if handoff_path else None  # Relative path
         )
         
         meta_path = run_dir / ".run.json"

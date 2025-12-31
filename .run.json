@@ -1,9 +1,9 @@
 {
-  "name": "HARNESS-016",
-  "branch": "run/HARNESS-016",
-  "created_at": 1766782917.455374,
+  "name": "HARNESS-FIX-001",
+  "branch": "run/HARNESS-FIX-001",
+  "created_at": 1767144892.7265248,
   "status": "active",
-  "project_dir": "/Users/zyahav/Documents/dev/claude-harness/runs/HARNESS-016",
-  "repo_path": "/Users/zyahav/Documents/dev/claude-harness",
+  "project_dir": "/Users/zyahav/tools/claude-harness/runs/HARNESS-FIX-001",
+  "repo_path": "/Users/zyahav/tools/claude-harness",
   "archon": null
 }

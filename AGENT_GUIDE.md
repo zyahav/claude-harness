@@ -105,6 +105,82 @@ Your `handoff.json` MUST strictly adhere to this format.
 - **Missing `acceptance_criteria`**: Must be a non-empty list of strings.
 - **`passes` is not boolean**: Must be `true` or `false` (literal).
 
+## 4b. Interactive Workflow (Claude.ai / Manual Mode)
+
+When working with Claude.ai (web/app) instead of Claude Code CLI, you skip the `c-harness run` command and work interactively.
+
+### Workflow Overview
+
+```
+Human creates handoff.json
+        ↓
+c-harness start <n> --handoff-path ./handoff.json
+        ↓
+[Claude.ai makes changes via MCP tools or guided edits]
+        ↓
+Human commits changes in worktree
+        ↓
+Update handoff.json: passes: true
+        ↓
+c-harness finish <n>
+```
+
+### Key Differences from Automated Mode
+
+| Aspect | Automated (`c-harness run`) | Manual (Claude.ai) |
+|--------|----------------------------|-------------------|
+| Agent invocation | Automatic | Skip this step |
+| Code changes | Agent writes files | Claude.ai guides, human applies |
+| Commits | Agent commits | Human commits |
+| Task completion | Agent marks passes | Human edits handoff.json |
+
+### Starting a Manual Run
+
+```bash
+c-harness start TASK-001 \
+  --repo-path /path/to/repo \
+  --mode brownfield \
+  --handoff-path ./handoff.json
+```
+
+The `--handoff-path` flag copies your handoff.json into the run directory.
+
+### Working with Claude.ai
+
+Share with Claude.ai:
+1. The worktree path: `runs/TASK-001/`
+2. The tasks from handoff.json
+3. Relevant codebase context
+
+Claude.ai can then:
+- Read files and understand the codebase
+- Suggest or make changes (via MCP file tools)
+- Help verify acceptance criteria
+
+### Completing Tasks Manually
+
+After making changes:
+
+```bash
+# In the worktree
+cd runs/TASK-001
+git add -A
+git commit -m "TASK-001: Description of changes"
+
+# Edit handoff.json to mark task complete
+# Change "passes": false to "passes": true
+```
+
+### Finishing
+
+```bash
+c-harness finish TASK-001
+```
+
+This validates tasks and pushes the branch.
+
+See [Claude.ai Workflow Guide](docs/CLAUDE_AI_WORKFLOW.md) for complete instructions.
+
 ## 5. Harness Commander (Advanced Workflow)
 
 Harness Commander is an ADHD-first control plane that helps manage multiple concurrent projects and tasks. It provides state management, reconciliation, and intelligent next-action recommendations.
