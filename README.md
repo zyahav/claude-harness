@@ -12,6 +12,7 @@ A robust CLI harness for running long-running autonomous coding agents using Cla
 ## Quick Links
 
 - **[🤖 Agent Guide](AGENT_GUIDE.md)**: Strictly formatted guide for autonomous agents.
+- **[💬 Claude.ai Workflow](docs/CLAUDE_AI_WORKFLOW.md)**: Guide for using c-harness with Claude.ai (manual mode).
 - **[📁 Examples](examples/)**: Sample handoff.json files to get started.
 - **[🔧 Brownfield Quick Start](docs/BROWNFIELD_QUICKSTART.md)**: Guide for fixing bugs in existing code.
 - **[Architectural Decision Records](docs/)**: Detailed design documents.
@@ -56,6 +57,34 @@ c-harness start BUG-123 --repo-path ../existing-project --mode brownfield
 ```
 
 See [Brownfield Quick Start](docs/BROWNFIELD_QUICKSTART.md) for a complete guide.
+
+### Using with Claude.ai (Manual Agent Mode)
+
+If you're using Claude.ai (web interface or app) instead of Claude Code CLI, you can still use c-harness for Git workflow management:
+
+```bash
+# 1. Create handoff.json with your tasks
+
+# 2. Start a run with handoff copy
+c-harness start BUG-123 \
+  --repo-path ../my-project \
+  --mode brownfield \
+  --handoff-path ./handoff.json
+
+# 3. Work with Claude.ai to make changes in runs/BUG-123/
+
+# 4. Commit your changes
+cd runs/BUG-123 && git add -A && git commit -m "Fix description"
+
+# 5. Update handoff.json: set "passes": true for completed tasks
+
+# 6. Finish and push
+c-harness finish BUG-123
+```
+
+The key difference: you skip `c-harness run` and do the work interactively with Claude.ai.
+
+See [Claude.ai Workflow Guide](docs/CLAUDE_AI_WORKFLOW.md) for detailed instructions.
 
 ## Installation
 

@@ -6,3 +6,7 @@
 {"timestamp": "2025-12-26T15:01:59.545140", "level": "INFO", "logger": "root", "message": "Starting new run: HARNESS-016"}
 {"timestamp": "2025-12-26T15:01:59.545241", "level": "INFO", "logger": "root", "message": "\nSuccess! Worktree created at: runs/HARNESS-016"}
 {"timestamp": "2025-12-26T15:01:59.545281", "level": "INFO", "logger": "root", "message": "To run the agent:\n  harness run HARNESS-016 --repo-path /Users/zyahav/Documents/dev/claude-harness"}
+{"timestamp": "2025-12-30T19:34:52.727249", "level": "DEBUG", "logger": "root", "message": "Logging initialized. Writing to runs/HARNESS-FIX-001/session.jsonl"}
+{"timestamp": "2025-12-30T19:34:52.727364", "level": "INFO", "logger": "root", "message": "Starting new run: HARNESS-FIX-001"}
+{"timestamp": "2025-12-30T19:34:52.727424", "level": "INFO", "logger": "root", "message": "\nSuccess! Worktree created at: runs/HARNESS-FIX-001"}
+{"timestamp": "2025-12-30T19:34:52.727452", "level": "INFO", "logger": "root", "message": "To run the agent:\n  harness run HARNESS-FIX-001 --repo-path /Users/zyahav/tools/claude-harness"}
