@@ -759,8 +759,8 @@ def handle_next(args: argparse.Namespace) -> None:
         current_state = state_mgr.load_state()
 
         # Run reconcile with caching
-        reconciler = reconcile.Reconciler(state_mgr, current_state)
-        reconciler.run_reconcile(use_cache=True)
+        reconciler = reconcile.Reconciler()
+        reconciler.reconcile(state_mgr)
 
         # Reload state after reconcile
         current_state = state_mgr.load_state()
@@ -816,8 +816,8 @@ def handle_focus(args: argparse.Namespace) -> None:
 
         # Run reconcile first to ensure state is up-to-date
         print("\nReconciling state with Git...")
-        reconciler = reconcile.Reconciler(state_mgr)
-        result = reconciler.run_reconcile()
+        reconciler = reconcile.Reconciler()
+        result = reconciler.reconcile(state_mgr)
         if result.drift_detected:
             print("  └─ State reconciled")
         # Reload state after reconcile
@@ -1195,8 +1195,8 @@ def handle_session(args: argparse.Namespace) -> None:
         state_mgr = state.StateManager()
         current_state = state_mgr.load_state()
 
-        reconciler = reconcile.Reconciler(state_mgr)
-        result = reconciler.run_reconcile()
+        reconciler = reconcile.Reconciler()
+        result = reconciler.reconcile(state_mgr)
 
         if result.drift_detected:
             print(f"  └─ Drift detected and fixed")
